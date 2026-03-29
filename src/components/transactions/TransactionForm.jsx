@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useCurrency } from '../../context/CurrencyContext.jsx'
 import { SUPPORTED_CURRENCIES } from '../../utils/exchangeRates.js'
@@ -59,16 +59,29 @@ export function TransactionForm({ transaction, onClose }) {
   // Reset sub-category when parent category changes
   useEffect(() => { setSubCategoryId('') }, [categoryId])
 
-  // Auto-select default sub-account when parent account changes
+  // Track whether this is the initial render — skip auto-fill effects on mount
+  // so that existing values on edit forms are preserved.
+  const didMount = useRef(false)
+  useEffect(() => { didMount.current = true }, [])
+
+  // Auto-select default sub-account when parent account changes (new txn only)
   useEffect(() => {
+    if (!didMount.current) return                      // skip on mount
     if (!accountId) { setSubAccountId(''); return }
+    if (isEdit) { setSubAccountId(''); return }        // account changed in edit → clear
     const savedSub = getDefaultSubAccountId(accountId)
     setSubAccountId(savedSub || '')
   }, [accountId])
 
-  // Reset transfer sub-accounts when parent accounts change
-  useEffect(() => { setFromSubAccountId(accountId ? (getDefaultSubAccountId(accountId) || '') : '') }, [accountId])
-  useEffect(() => { setToSubAccountId(toAccountId ? (getDefaultSubAccountId(toAccountId) || '') : '') }, [toAccountId])
+  // Reset transfer sub-accounts when parent accounts change (skip mount)
+  useEffect(() => {
+    if (!didMount.current) return
+    setFromSubAccountId(accountId ? (getDefaultSubAccountId(accountId) || '') : '')
+  }, [accountId])
+  useEffect(() => {
+    if (!didMount.current) return
+    setToSubAccountId(toAccountId ? (getDefaultSubAccountId(toAccountId) || '') : '')
+  }, [toAccountId])
 
   const filteredCategories = topLevelCategories.filter(c => c.type === type || c.type === 'both')
   const availableSubCategories = categoryId ? subCategoriesOf(categoryId) : []
