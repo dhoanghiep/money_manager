@@ -9,6 +9,7 @@ import { NoteInput } from '../ui/NoteInput.jsx'
 import { toDateString, today } from '../../utils/dateHelpers.js'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
 import { getDefaultAccountId, getDefaultSubAccountId } from '../accounts/AccountManager.jsx'
+import { getDefaultCategoryId, getDefaultSubCategoryId } from '../categories/CategoryManager.jsx'
 
 export function TransactionForm({ transaction, onClose }) {
   const { transactions, categories, accounts, addTransaction, editTransaction, addTransfer, topLevelCategories, subCategoriesOf, topLevelAccounts, subAccountsOf } = useApp()
@@ -46,6 +47,14 @@ export function TransactionForm({ transaction, onClose }) {
     }
   }, [accounts])
 
+  // Default category for new transactions
+  useEffect(() => {
+    if (!isEdit && !transaction?.categoryId && categories.length > 0 && !categoryId) {
+      const savedId = getDefaultCategoryId()
+      if (savedId && categories.find(c => c.id === savedId)) setCategoryId(savedId)
+    }
+  }, [categories])
+
   // When currency changes, pre-fill rate from cached rates
   useEffect(() => {
     if (currency === defaultCurrency) {
@@ -56,8 +65,14 @@ export function TransactionForm({ transaction, onClose }) {
     }
   }, [currency, defaultCurrency])
 
-  // Reset sub-category when parent category changes
-  useEffect(() => { setSubCategoryId('') }, [categoryId])
+  // Reset / pre-fill sub-category when parent category changes
+  useEffect(() => {
+    if (!didMount.current) return           // skip on mount (preserve edit value)
+    if (!categoryId) { setSubCategoryId(''); return }
+    if (isEdit) { setSubCategoryId(''); return }
+    const savedSub = getDefaultSubCategoryId(categoryId)
+    setSubCategoryId(savedSub || '')
+  }, [categoryId])
 
   // Track whether this is the initial render — skip auto-fill effects on mount
   // so that existing values on edit forms are preserved.

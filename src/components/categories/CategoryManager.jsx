@@ -5,6 +5,14 @@ import { Button } from '../ui/Button.jsx'
 import { Input, Select } from '../ui/Input.jsx'
 import { Modal } from '../ui/Modal.jsx'
 
+const DEFAULT_CAT_KEY = 'mm_default_category_id'
+export function getDefaultCategoryId() { return localStorage.getItem(DEFAULT_CAT_KEY) || '' }
+export function setDefaultCategoryId(id) { localStorage.setItem(DEFAULT_CAT_KEY, id) }
+
+const DEFAULT_SUBCAT_KEY = 'mm_default_subcategory_'
+export function getDefaultSubCategoryId(parentId) { return localStorage.getItem(DEFAULT_SUBCAT_KEY + parentId) || '' }
+export function setDefaultSubCategoryId(parentId, id) { localStorage.setItem(DEFAULT_SUBCAT_KEY + parentId, id) }
+
 const COLORS = ['#EF4444','#F97316','#F59E0B','#84CC16','#22C55E','#14B8A6','#3B82F6','#6366F1','#A855F7','#EC4899','#6B7280']
 
 // ── Category Form (used for both parent and sub-category) ─────
@@ -86,6 +94,24 @@ export function CategoryManager() {
   const [addSubParentId, setAddSubParentId] = useState(null) // parentId when adding sub-category
   const [reordering, setReordering] = useState(false)
   const [expandedIds, setExpandedIds] = useState(new Set())
+  const [defaultId, setDefaultId] = useState(getDefaultCategoryId)
+  const [defaultSubIds, setDefaultSubIds] = useState({})
+
+  function handleSetDefault(id) {
+    setDefaultCategoryId(id)
+    setDefaultId(id)
+    toast.show({ message: 'Default category updated' })
+  }
+
+  function handleSetDefaultSub(parentId, subId) {
+    setDefaultSubCategoryId(parentId, subId)
+    setDefaultSubIds(prev => ({ ...prev, [parentId]: subId }))
+    toast.show({ message: 'Default sub-category updated' })
+  }
+
+  function getDefaultSub(parentId) {
+    return defaultSubIds[parentId] ?? getDefaultSubCategoryId(parentId)
+  }
 
   function toggleExpand(id) {
     setExpandedIds(prev => {
@@ -168,14 +194,17 @@ export function CategoryManager() {
               return (
                 <div key={cat.id}>
                   {/* Parent category row */}
-                  <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                  <div
+                    className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                    onClick={() => subs.length > 0 ? toggleExpand(cat.id) : null}
+                  >
                     {/* Reorder */}
                     <div className="flex flex-col gap-0.5">
                       <button disabled={reordering || cat._index === 0}
-                        onClick={() => move(cat._index, -1)}
+                        onClick={e => { e.stopPropagation(); move(cat._index, -1) }}
                         className="text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-20 transition leading-none text-xs">▲</button>
                       <button disabled={reordering || cat._index === topLevelCategories.length - 1}
-                        onClick={() => move(cat._index, 1)}
+                        onClick={e => { e.stopPropagation(); move(cat._index, 1) }}
                         className="text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-20 transition leading-none text-xs">▼</button>
                     </div>
 
@@ -185,46 +214,71 @@ export function CategoryManager() {
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{cat.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{cat.name}</span>
+                        {defaultId === cat.id && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 leading-none">default</span>
+                        )}
+                      </div>
                       {subs.length > 0 && (
-                        <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">
+                        <span className="text-xs text-gray-400 dark:text-gray-500">
                           {subs.length} sub-{subs.length === 1 ? 'category' : 'categories'}
                         </span>
                       )}
                     </div>
 
-                    {/* Expand toggle if has subs */}
+                    {/* Expand indicator */}
                     {subs.length > 0 && (
-                      <button onClick={() => toggleExpand(cat.id)}
-                        className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition text-xs">
+                      <span className="text-xs text-gray-400 dark:text-gray-500 select-none">
                         {expanded ? '▾' : '▸'}
-                      </button>
+                      </span>
                     )}
-                    <button onClick={() => openAddSub(cat.id)}
+
+                    {/* Default star */}
+                    <button
+                      onClick={e => { e.stopPropagation(); handleSetDefault(cat.id) }}
+                      title={defaultId === cat.id ? 'Default category' : 'Set as default'}
+                      className={`p-1.5 transition text-base leading-none ${defaultId === cat.id ? 'text-yellow-400' : 'text-gray-200 dark:text-gray-700 hover:text-yellow-400'}`}
+                    >★</button>
+
+                    <button onClick={e => { e.stopPropagation(); openAddSub(cat.id) }}
                       className="p-1.5 text-gray-400 hover:text-indigo-500 transition text-sm" title="Add sub-category">⊕</button>
-                    <button onClick={() => openEdit(cat)}
+                    <button onClick={e => { e.stopPropagation(); openEdit(cat) }}
                       className="p-1.5 text-gray-400 hover:text-indigo-600 transition">✏️</button>
                     {!cat.isDefault && (
-                      <button onClick={() => handleDelete(cat)}
+                      <button onClick={e => { e.stopPropagation(); handleDelete(cat) }}
                         className="p-1.5 text-gray-400 hover:text-red-500 transition">🗑</button>
                     )}
                   </div>
 
                   {/* Sub-categories (expanded) */}
-                  {(expanded || subs.length === 0) && subs.map(sub => (
-                    <div key={sub.id} className="flex items-center gap-2 pl-10 pr-4 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20">
-                      <div className="w-1 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0"
-                        style={{ backgroundColor: sub.color + '20' }}>
-                        {sub.icon}
+                  {(expanded || subs.length === 0) && subs.map(sub => {
+                    const isDefaultSub = getDefaultSub(cat.id) === sub.id
+                    return (
+                      <div key={sub.id} className="flex items-center gap-2 pl-10 pr-4 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20">
+                        <div className="w-1 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0"
+                          style={{ backgroundColor: sub.color + '20' }}>
+                          {sub.icon}
+                        </div>
+                        <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                          <span className="text-sm text-gray-700 dark:text-gray-300">{sub.name}</span>
+                          {isDefaultSub && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 leading-none">default</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleSetDefaultSub(cat.id, sub.id)}
+                          title={isDefaultSub ? 'Default sub-category' : 'Set as default sub-category'}
+                          className={`p-1 transition text-sm leading-none ${isDefaultSub ? 'text-yellow-400' : 'text-gray-200 dark:text-gray-700 hover:text-yellow-400'}`}
+                        >★</button>
+                        <button onClick={() => openEdit(sub)}
+                          className="p-1 text-gray-400 hover:text-indigo-600 transition text-sm">✏️</button>
+                        <button onClick={() => handleDelete(sub)}
+                          className="p-1 text-gray-400 hover:text-red-500 transition text-sm">🗑</button>
                       </div>
-                      <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">{sub.name}</span>
-                      <button onClick={() => openEdit(sub)}
-                        className="p-1 text-gray-400 hover:text-indigo-600 transition text-sm">✏️</button>
-                      <button onClick={() => handleDelete(sub)}
-                        className="p-1 text-gray-400 hover:text-red-500 transition text-sm">🗑</button>
-                    </div>
-                  ))}
+                    )
+                  })}
 
                   {/* "General" placeholder row when expanded and has subs */}
                   {expanded && subs.length > 0 && (
