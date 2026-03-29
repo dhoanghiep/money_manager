@@ -146,11 +146,11 @@ function addTransaction(data) {
     data.categoryId || '',
     data.accountId || '',
     data.note || '',
-    now,
-    now,
-    data.subCategoryId || '',
+    now,              // createdAt
+    now,              // updatedAt
     data.currency || '',
     data.exchangeRate || 1,
+    data.subCategoryId || '',
     data.subAccountId || '',
   ]);
   return { ok: true, id: id };
