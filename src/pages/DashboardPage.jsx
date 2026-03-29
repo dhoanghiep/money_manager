@@ -66,6 +66,7 @@ function AccountsTab({ currency }) {
   const navigate = useNavigate()
   const [allTxns, setAllTxns] = useState([])
   const [loadingBal, setLoadingBal] = useState(true)
+  const [multiCurrency, setMultiCurrency] = useState(false)
 
   useEffect(() => {
     api.getTransactions()
@@ -88,6 +89,31 @@ function AccountsTab({ currency }) {
     () => topLevelAccounts.reduce((s, a) => s + getBalance(a.id), 0),
     [allTxns, topLevelAccounts]
   )
+
+  // Per-currency balances: group raw (un-converted) transaction amounts by currency.
+  // Initial balances are treated as default currency.
+  const currencyBalances = useMemo(() => {
+    const map = {}
+    // Initial balances → default currency
+    topLevelAccounts.forEach(acc => {
+      const base = Number(acc.initialBalance) || 0
+      if (base !== 0) map[currency] = (map[currency] || 0) + base
+    })
+    allTxns.forEach(t => {
+      if (t.type === 'transfer') return
+      const curr = (t.currency && t.currency !== '') ? t.currency : currency
+      const amt = Number(t.amount) || 0
+      if (t.type === 'income')  map[curr] = (map[curr] || 0) + amt
+      if (t.type === 'expense') map[curr] = (map[curr] || 0) - amt
+    })
+    // Sort: default currency first, then others descending by abs value
+    return Object.entries(map)
+      .sort(([ca, va], [cb, vb]) => {
+        if (ca === currency) return -1
+        if (cb === currency) return 1
+        return Math.abs(vb) - Math.abs(va)
+      })
+  }, [allTxns, topLevelAccounts, currency])
 
   // Monthly breakdown: group allTxns by YYYY-MM, then by accountId
   const monthlyData = useMemo(() => {
@@ -121,13 +147,48 @@ function AccountsTab({ currency }) {
 
       {/* ── Total balance hero ── */}
       <div className="mx-4 rounded-2xl bg-indigo-600 dark:bg-indigo-700 px-5 py-5 shadow-md">
-        <p className="text-xs font-semibold text-indigo-200 mb-1 uppercase tracking-wide">Total Balance</p>
+        {/* Header row */}
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold text-indigo-200 uppercase tracking-wide">Total Balance</p>
+          <button
+            onClick={() => setMultiCurrency(v => !v)}
+            className={`text-[11px] font-semibold px-2.5 py-1 rounded-full transition ${
+              multiCurrency
+                ? 'bg-white text-indigo-700'
+                : 'bg-indigo-500/50 text-indigo-100 hover:bg-indigo-500'
+            }`}
+          >
+            {multiCurrency ? '⇄ By currency' : `${currency} only`}
+          </button>
+        </div>
+
         {loadingBal ? (
           <p className="text-2xl font-bold text-white opacity-50">…</p>
+        ) : multiCurrency ? (
+          /* ── Per-currency view ── */
+          <div className="flex flex-col gap-2">
+            {currencyBalances.length === 0 ? (
+              <p className="text-2xl font-bold text-white opacity-50">—</p>
+            ) : currencyBalances.map(([curr, amt]) => (
+              <div key={curr} className="flex items-baseline justify-between">
+                <span className="text-xs font-semibold text-indigo-200 w-10">{curr}</span>
+                <span className={`text-2xl font-bold ${amt >= 0 ? 'text-white' : 'text-red-300'}`}>
+                  {formatCurrency(amt, curr)}
+                </span>
+              </div>
+            ))}
+          </div>
         ) : (
+          /* ── Default currency view ── */
           <p className="text-3xl font-bold text-white">{formatCurrency(totalBalance, currency)}</p>
         )}
-        <p className="text-xs text-indigo-300 mt-1">{topLevelAccounts.length} account{topLevelAccounts.length !== 1 ? 's' : ''}</p>
+
+        <p className="text-xs text-indigo-300 mt-2">
+          {topLevelAccounts.length} account{topLevelAccounts.length !== 1 ? 's' : ''}
+          {multiCurrency && currencyBalances.length > 1 && (
+            <span> · {currencyBalances.length} currencies</span>
+          )}
+        </p>
       </div>
 
       {/* ── Account balance cards ── */}
