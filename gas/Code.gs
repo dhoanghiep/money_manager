@@ -336,10 +336,17 @@ function sheetToObjects(sheet) {
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return [];
   const headers = data[0];
+  const tz = Session.getScriptTimeZone();
   return data.slice(1).map(function (row) {
     const obj = {};
     headers.forEach(function (header, i) {
-      obj[header] = row[i];
+      var val = row[i];
+      // Normalize Date objects → 'YYYY-MM-DD' strings so the frontend
+      // string-comparison (t.date === '2024-01-15') always works.
+      if (val instanceof Date && !isNaN(val.getTime())) {
+        val = Utilities.formatDate(val, tz, 'yyyy-MM-dd');
+      }
+      obj[header] = val;
     });
     return obj;
   });

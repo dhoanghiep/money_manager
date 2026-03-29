@@ -127,8 +127,16 @@ export function getDailyTotals(transactions, startDate, endDate) {
   })
 }
 
+// Normalize a date value to YYYY-MM-DD string (handles ISO timestamps too)
+function normDate(val) {
+  if (!val) return ''
+  const s = String(val)
+  // ISO timestamp like "2024-01-15T00:00:00.000Z" → take first 10 chars
+  return s.length > 10 ? s.slice(0, 10) : s
+}
+
 export function getTransactionsForDay(transactions, dateStr) {
-  return transactions.filter(t => t.date === dateStr)
+  return transactions.filter(t => normDate(t.date) === dateStr)
 }
 
 export function getTransactionsForDateRange(transactions, startDate, endDate) {
@@ -136,5 +144,5 @@ export function getTransactionsForDateRange(transactions, startDate, endDate) {
 }
 
 export function hasTransactionsOnDay(transactions, dateStr) {
-  return transactions.some(t => t.date === dateStr)
+  return transactions.some(t => normDate(t.date) === dateStr)
 }
