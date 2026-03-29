@@ -8,7 +8,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: github-pages  # matches the environment where you added the secrets
 
     steps:
       - name: Checkout
