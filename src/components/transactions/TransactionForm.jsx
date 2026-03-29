@@ -11,7 +11,7 @@ const EXPENSE_COLOR = '#EF4444'
 export function TransactionForm({ transaction, onClose }) {
   const { categories, accounts, addTransaction, editTransaction } = useApp()
   const toast = useToast()
-  const isEdit = !!transaction
+  const isEdit = !!transaction?.id
 
   const [type, setType] = useState(transaction?.type || 'expense')
   const [amount, setAmount] = useState(transaction?.amount?.toString() || '')
