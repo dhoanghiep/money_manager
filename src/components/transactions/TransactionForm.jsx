@@ -4,13 +4,14 @@ import { useCurrency } from '../../context/CurrencyContext.jsx'
 import { SUPPORTED_CURRENCIES } from '../../utils/exchangeRates.js'
 import { useToast } from '../ui/Toast.jsx'
 import { Button } from '../ui/Button.jsx'
-import { Input, Select, Textarea } from '../ui/Input.jsx'
+import { Input, Select } from '../ui/Input.jsx'
+import { NoteInput } from '../ui/NoteInput.jsx'
 import { toDateString, today } from '../../utils/dateHelpers.js'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
 import { getDefaultAccountId, getDefaultSubAccountId } from '../accounts/AccountManager.jsx'
 
 export function TransactionForm({ transaction, onClose }) {
-  const { categories, accounts, addTransaction, editTransaction, topLevelCategories, subCategoriesOf, topLevelAccounts, subAccountsOf } = useApp()
+  const { transactions, categories, accounts, addTransaction, editTransaction, addTransfer, topLevelCategories, subCategoriesOf, topLevelAccounts, subAccountsOf } = useApp()
   const { defaultCurrency, getRate, fetchSingleRate } = useCurrency()
   const toast = useToast()
   const isEdit = !!transaction?.id
@@ -22,6 +23,10 @@ export function TransactionForm({ transaction, onClose }) {
   const [subCategoryId, setSubCategoryId] = useState(transaction?.subCategoryId || '')
   const [accountId, setAccountId] = useState(transaction?.accountId || '')
   const [subAccountId, setSubAccountId] = useState(transaction?.subAccountId || '')
+  // Transfer-specific
+  const [toAccountId, setToAccountId] = useState(transaction?.toAccountId || '')
+  const [fromSubAccountId, setFromSubAccountId] = useState('')
+  const [toSubAccountId, setToSubAccountId] = useState('')
   const [currency, setCurrency] = useState(transaction?.currency || defaultCurrency)
   const [exchangeRate, setExchangeRate] = useState(
     transaction?.exchangeRate ? String(transaction.exchangeRate) : ''
@@ -61,9 +66,15 @@ export function TransactionForm({ transaction, onClose }) {
     setSubAccountId(savedSub || '')
   }, [accountId])
 
+  // Reset transfer sub-accounts when parent accounts change
+  useEffect(() => { setFromSubAccountId(accountId ? (getDefaultSubAccountId(accountId) || '') : '') }, [accountId])
+  useEffect(() => { setToSubAccountId(toAccountId ? (getDefaultSubAccountId(toAccountId) || '') : '') }, [toAccountId])
+
   const filteredCategories = topLevelCategories.filter(c => c.type === type || c.type === 'both')
   const availableSubCategories = categoryId ? subCategoriesOf(categoryId) : []
   const availableSubAccounts = accountId ? subAccountsOf(accountId) : []
+  const fromSubAccounts = accountId ? subAccountsOf(accountId) : []
+  const toSubAccounts   = toAccountId ? subAccountsOf(toAccountId) : []
 
   const isForeign = currency !== defaultCurrency
   const rate = parseFloat(exchangeRate) || 0
@@ -85,12 +96,19 @@ export function TransactionForm({ transaction, onClose }) {
     }
   }
 
+  const isTransfer = type === 'transfer'
+
   function validate() {
     const errs = {}
     if (!amount || isNaN(amount) || Number(amount) <= 0) errs.amount = 'Enter a valid amount'
     if (!date) errs.date = 'Date is required'
     if (isForeign && (!exchangeRate || isNaN(exchangeRate) || Number(exchangeRate) <= 0)) {
       errs.exchangeRate = 'Enter the exchange rate'
+    }
+    if (isTransfer && !accountId) errs.accountId = 'Select the source account'
+    if (isTransfer && !toAccountId) errs.toAccountId = 'Select the destination account'
+    if (isTransfer && accountId && toAccountId && accountId === toAccountId) {
+      errs.toAccountId = 'Source and destination must differ'
     }
     return errs
   }
@@ -102,24 +120,39 @@ export function TransactionForm({ transaction, onClose }) {
 
     setLoading(true)
     try {
-      const data = {
-        type,
-        amount: Number(amount),
-        date,
-        categoryId: categoryId || null,
-        subCategoryId: subCategoryId || null,
-        accountId: accountId || null,
-        subAccountId: subAccountId || null,
-        note: note.trim(),
-        currency: currency || defaultCurrency,
-        exchangeRate: isForeign ? Number(exchangeRate) : 1,
-      }
-      if (isEdit) {
-        await editTransaction(transaction.id, data)
-        toast.show({ message: 'Transaction updated' })
+      if (isTransfer) {
+        await addTransfer({
+          date,
+          amount: Number(amount),
+          fromAccountId: accountId,
+          fromSubAccountId: fromSubAccountId || null,
+          toAccountId,
+          toSubAccountId: toSubAccountId || null,
+          note: note.trim(),
+          currency: currency || defaultCurrency,
+          exchangeRate: isForeign ? Number(exchangeRate) : 1,
+        })
+        toast.show({ message: 'Transfer recorded' })
       } else {
-        await addTransaction(data)
-        toast.show({ message: 'Transaction added' })
+        const data = {
+          type,
+          amount: Number(amount),
+          date,
+          categoryId: categoryId || null,
+          subCategoryId: subCategoryId || null,
+          accountId: accountId || null,
+          subAccountId: subAccountId || null,
+          note: note.trim(),
+          currency: currency || defaultCurrency,
+          exchangeRate: isForeign ? Number(exchangeRate) : 1,
+        }
+        if (isEdit) {
+          await editTransaction(transaction.id, data)
+          toast.show({ message: 'Transaction updated' })
+        } else {
+          await addTransaction(data)
+          toast.show({ message: 'Transaction added' })
+        }
       }
       onClose()
     } catch (err) {
@@ -133,18 +166,22 @@ export function TransactionForm({ transaction, onClose }) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-5">
       {/* Type toggle */}
       <div className="flex rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
-        {['expense', 'income'].map(t => (
+        {[
+          { key: 'expense',  label: '↓ Expense',  active: 'bg-red-500 text-white'    },
+          { key: 'income',   label: '↑ Income',   active: 'bg-green-500 text-white'  },
+          { key: 'transfer', label: '⇄ Transfer', active: 'bg-indigo-500 text-white' },
+        ].map(({ key, label, active }) => (
           <button
-            key={t}
+            key={key}
             type="button"
-            onClick={() => { setType(t); setCategoryId('') }}
+            onClick={() => { setType(key); setCategoryId('') }}
             className={`flex-1 py-2.5 text-sm font-semibold transition ${
-              type === t
-                ? t === 'income' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+              type === key
+                ? active
                 : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
             }`}
           >
-            {t === 'income' ? '↑ Income' : '↓ Expense'}
+            {label}
           </button>
         ))}
       </div>
@@ -226,64 +263,117 @@ export function TransactionForm({ transaction, onClose }) {
         error={errors.date}
       />
 
-      {/* Category */}
-      <Select
-        label="Category"
-        value={categoryId}
-        onChange={e => setCategoryId(e.target.value)}
-      >
-        <option value="">— No category —</option>
-        {filteredCategories.map(c => (
-          <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-        ))}
-      </Select>
+      {/* Transfer: From / To accounts */}
+      {isTransfer ? (
+        <>
+          <Select
+            label="From Account"
+            value={accountId}
+            onChange={e => setAccountId(e.target.value)}
+            error={errors.accountId}
+          >
+            <option value="">— Select account —</option>
+            {accounts.filter(a => !a.parentId).map(a => (
+              <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
+            ))}
+          </Select>
+          {fromSubAccounts.length > 0 && (
+            <Select
+              label="From Sub-account"
+              value={fromSubAccountId}
+              onChange={e => setFromSubAccountId(e.target.value)}
+            >
+              <option value="">General</option>
+              {fromSubAccounts.map(a => (
+                <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
+              ))}
+            </Select>
+          )}
+          <Select
+            label="To Account"
+            value={toAccountId}
+            onChange={e => setToAccountId(e.target.value)}
+            error={errors.toAccountId}
+          >
+            <option value="">— Select account —</option>
+            {accounts.filter(a => !a.parentId && a.id !== accountId).map(a => (
+              <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
+            ))}
+          </Select>
+          {toSubAccounts.length > 0 && (
+            <Select
+              label="To Sub-account"
+              value={toSubAccountId}
+              onChange={e => setToSubAccountId(e.target.value)}
+            >
+              <option value="">General</option>
+              {toSubAccounts.map(a => (
+                <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
+              ))}
+            </Select>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Category */}
+          <Select
+            label="Category"
+            value={categoryId}
+            onChange={e => setCategoryId(e.target.value)}
+          >
+            <option value="">— No category —</option>
+            {filteredCategories.map(c => (
+              <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+            ))}
+          </Select>
 
-      {/* Sub-category */}
-      {categoryId && (
-        <Select
-          label="Sub-category"
-          value={subCategoryId}
-          onChange={e => setSubCategoryId(e.target.value)}
-        >
-          <option value="">General</option>
-          {availableSubCategories.map(c => (
-            <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-          ))}
-        </Select>
+          {/* Sub-category */}
+          {categoryId && (
+            <Select
+              label="Sub-category"
+              value={subCategoryId}
+              onChange={e => setSubCategoryId(e.target.value)}
+            >
+              <option value="">General</option>
+              {availableSubCategories.map(c => (
+                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+              ))}
+            </Select>
+          )}
+
+          {/* Account */}
+          <Select
+            label="Account"
+            value={accountId}
+            onChange={e => setAccountId(e.target.value)}
+          >
+            <option value="">— No account —</option>
+            {topLevelAccounts.map(a => (
+              <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
+            ))}
+          </Select>
+
+          {/* Sub-account */}
+          {accountId && availableSubAccounts.length > 0 && (
+            <Select
+              label="Sub-account"
+              value={subAccountId}
+              onChange={e => setSubAccountId(e.target.value)}
+            >
+              <option value="">General</option>
+              {availableSubAccounts.map(a => (
+                <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
+              ))}
+            </Select>
+          )}
+        </>
       )}
 
-      {/* Account */}
-      <Select
-        label="Account"
-        value={accountId}
-        onChange={e => setAccountId(e.target.value)}
-      >
-        <option value="">— No account —</option>
-        {topLevelAccounts.map(a => (
-          <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
-        ))}
-      </Select>
-
-      {/* Sub-account */}
-      {accountId && availableSubAccounts.length > 0 && (
-        <Select
-          label="Sub-account"
-          value={subAccountId}
-          onChange={e => setSubAccountId(e.target.value)}
-        >
-          <option value="">General</option>
-          {availableSubAccounts.map(a => (
-            <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
-          ))}
-        </Select>
-      )}
-
-      {/* Note */}
-      <Textarea
-        label="Note (optional)"
-        placeholder="Add a note…"
+      {/* Note with autocomplete */}
+      <NoteInput
         value={note}
         onChange={e => setNote(e.target.value)}
+        allNotes={transactions.map(t => t.note).filter(Boolean)}
       />
 
       {/* Actions */}
@@ -293,7 +383,7 @@ export function TransactionForm({ transaction, onClose }) {
         </Button>
         <Button
           type="submit"
-          variant={type === 'income' ? 'income' : 'expense'}
+          variant={type === 'income' ? 'income' : type === 'transfer' ? 'default' : 'expense'}
           className="flex-1"
           disabled={loading}
         >

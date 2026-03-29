@@ -55,6 +55,14 @@ export const api = {
     return request('POST', {}, { action: 'deleteTransaction', id })
   },
 
+  addTransfer(data) {
+    return request('POST', {}, { action: 'addTransfer', data })
+  },
+
+  deleteTransfer(transferId) {
+    return request('POST', {}, { action: 'deleteTransfer', transferId })
+  },
+
   // ── Categories ────────────────────────────────────────────
   getCategories() {
     return request('GET', { action: 'getCategories' })

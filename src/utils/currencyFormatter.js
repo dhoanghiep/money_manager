@@ -2,7 +2,7 @@
 const ZERO_DECIMAL = new Set(['VND', 'JPY', 'KRW', 'IDR'])
 
 export function formatCurrency(amount, currency = 'AUD') {
-  const decimals = ZERO_DECIMAL.has(currency) ? 0 : 0 // keep 0 for all for clean UI
+  const decimals = ZERO_DECIMAL.has(currency) ? 0 : 2
   return new Intl.NumberFormat('en-AU', {
     style: 'currency',
     currency,

@@ -8,7 +8,7 @@ import { TransactionList } from '../components/transactions/TransactionList.jsx'
 import { PageSpinner } from '../components/ui/Spinner.jsx'
 import { Modal } from '../components/ui/Modal.jsx'
 import { TransactionForm } from '../components/transactions/TransactionForm.jsx'
-import { filterByDateRange, sumIncome, sumExpense } from '../utils/aggregations.js'
+import { filterByDateRange, sumIncome, sumExpense, sumTransferBalance } from '../utils/aggregations.js'
 import { formatCurrency } from '../utils/currencyFormatter.js'
 import {
   today, toDateString, getPeriodRange, navigatePeriod,
@@ -83,10 +83,10 @@ export function AccountDetailPage() {
     return filterByDateRange(tabTxns, start, end)
   }, [tabTxns, period, refDate])
 
-  // Current balance = initialBalance + all-time income - all-time expense for this account/sub
+  // Current balance = initialBalance + all-time income - expense + transfers (in - out)
   const balance = useMemo(() => {
     const base = activeSubId === 'all' ? (Number(account?.initialBalance) || 0) : 0
-    return base + sumIncome(tabTxns) - sumExpense(tabTxns)
+    return base + sumIncome(tabTxns) - sumExpense(tabTxns) + sumTransferBalance(tabTxns)
   }, [tabTxns, account, activeSubId])
 
   const income = useMemo(() => sumIncome(periodTxns), [periodTxns])

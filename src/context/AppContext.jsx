@@ -53,6 +53,8 @@ function reducer(state, action) {
     }
     case 'REMOVE_TRANSACTION':
       return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) }
+    case 'REMOVE_TRANSFER':
+      return { ...state, transactions: state.transactions.filter(t => t.transferId !== action.payload) }
     case 'ADD_CATEGORY':
       return { ...state, categories: [...state.categories, action.payload] }
     case 'UPDATE_CATEGORY':
@@ -168,6 +170,23 @@ export function AppProvider({ children }) {
     dispatch({ type: 'REMOVE_TRANSACTION', payload: id })
   }
 
+  async function addTransfer(data) {
+    const res = await api.addTransfer(data)
+    const now = new Date().toISOString()
+    const base = { date: data.date, amount: data.amount, type: 'transfer', note: data.note || '',
+      currency: data.currency, exchangeRate: data.exchangeRate || 1,
+      transferId: res.transferId, fromAccountId: data.fromAccountId, toAccountId: data.toAccountId,
+      createdAt: now, updatedAt: now }
+    dispatch({ type: 'UPSERT_TRANSACTION', payload: { ...base, id: res.idOut, accountId: data.fromAccountId, subAccountId: data.fromSubAccountId || '' } })
+    dispatch({ type: 'UPSERT_TRANSACTION', payload: { ...base, id: res.idIn,  accountId: data.toAccountId,  subAccountId: data.toSubAccountId   || '' } })
+    return res
+  }
+
+  async function removeTransfer(transferId) {
+    await api.deleteTransfer(transferId)
+    dispatch({ type: 'REMOVE_TRANSFER', payload: transferId })
+  }
+
   async function addCategory(data) {
     const res = await api.addCategory(data)
     const newCat = { ...data, id: res.id, isDefault: false }
@@ -258,6 +277,8 @@ export function AppProvider({ children }) {
     addTransaction,
     editTransaction,
     removeTransaction,
+    addTransfer,
+    removeTransfer,
     addCategory,
     editCategory,
     removeCategory,

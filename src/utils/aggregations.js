@@ -34,6 +34,20 @@ export function netBalance(transactions) {
   return sumIncome(transactions) - sumExpense(transactions)
 }
 
+// Net effect of transfers on an account's balance.
+// Assumes transactions are already filtered to a single account.
+// Each transfer record carries fromAccountId + toAccountId.
+export function sumTransferBalance(transactions) {
+  return transactions
+    .filter(t => t.type === 'transfer')
+    .reduce((acc, t) => {
+      const amt = baseAmount(t)
+      if (t.accountId === t.fromAccountId) return acc - amt  // money leaving
+      if (t.accountId === t.toAccountId)   return acc + amt  // money arriving
+      return acc
+    }, 0)
+}
+
 export function groupByCategory(transactions, categories) {
   const map = {}
   transactions.forEach(t => {
@@ -81,8 +95,9 @@ export function groupByAccount(transactions, accounts) {
     const key = t.accountId || 'unknown'
     if (!map[key]) map[key] = { accountId: key, income: 0, expense: 0, total: 0 }
     const amt = baseAmount(t)
-    if (t.type === 'income') { map[key].income += amt; map[key].total += amt }
-    else { map[key].expense += amt; map[key].total += amt }
+    if (t.type === 'income')  { map[key].income  += amt; map[key].total += amt }
+    else if (t.type === 'expense') { map[key].expense += amt; map[key].total += amt }
+    // transfers: excluded from stats grouping
   })
 
   return Object.values(map).map(item => {

@@ -104,6 +104,12 @@ function doPost(e) {
       case 'applyDueSchedules':
         result = applyDueSchedules();
         break;
+      case 'addTransfer':
+        result = addTransfer(data);
+        break;
+      case 'deleteTransfer':
+        result = deleteTransfer(body.transferId);
+        break;
       default:
         result = { error: 'Unknown action: ' + action };
     }
@@ -189,6 +195,50 @@ function updateTransaction(id, data) {
     }
   }
   return { error: 'Transaction not found: ' + id };
+}
+
+// Creates two linked transaction records for a transfer between accounts.
+// Both records share a transferId and carry fromAccountId + toAccountId.
+function addTransfer(data) {
+  const sheet = getSheet(SHEET_NAMES.TRANSACTIONS);
+  const now = new Date().toISOString();
+  const transferId = generateId('trf');
+  const idOut = generateId('txn');
+  const idIn  = generateId('txn');
+
+  // Outflow: money leaves fromAccount (subAccountId = fromSubAccountId)
+  sheet.appendRow([
+    idOut, data.date, data.amount, 'transfer',
+    '', data.fromAccountId, data.note || '',
+    now, now,
+    data.currency || '', data.exchangeRate || 1,
+    '', data.fromSubAccountId || '',
+    transferId, data.fromAccountId, data.toAccountId,
+  ]);
+  // Inflow: money arrives at toAccount (subAccountId = toSubAccountId)
+  sheet.appendRow([
+    idIn, data.date, data.amount, 'transfer',
+    '', data.toAccountId, data.note || '',
+    now, now,
+    data.currency || '', data.exchangeRate || 1,
+    '', data.toSubAccountId || '',
+    transferId, data.fromAccountId, data.toAccountId,
+  ]);
+  return { ok: true, transferId: transferId, idOut: idOut, idIn: idIn };
+}
+
+// Deletes both legs of a transfer by transferId.
+function deleteTransfer(transferId) {
+  const sheet = getSheet(SHEET_NAMES.TRANSACTIONS);
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  const tCol = headers.indexOf('transferId');
+  if (tCol === -1) return { error: 'transferId column not found' };
+  // Delete from bottom up so row numbers stay valid
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (rows[i][tCol] === transferId) sheet.deleteRow(i + 1);
+  }
+  return { ok: true };
 }
 
 function deleteTransaction(id) {
@@ -475,6 +525,22 @@ function addSubAccountColumns() {
   }
 
   Logger.log('Sub-account migration complete!');
+}
+
+// ── Transfer Column Migration ──────────────────────────────────
+// Run once to add transferId, fromAccountId, toAccountId to Transactions.
+
+function addTransferColumns() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var txSheet = ss.getSheetByName('Transactions');
+  var headers = txSheet.getRange(1, 1, 1, txSheet.getLastColumn()).getValues()[0];
+  ['transferId', 'fromAccountId', 'toAccountId'].forEach(function(col) {
+    if (headers.indexOf(col) === -1) {
+      txSheet.getRange(1, txSheet.getLastColumn() + 1).setValue(col);
+      Logger.log('Added ' + col + ' to Transactions');
+    }
+  });
+  Logger.log('Transfer migration complete!');
 }
 
 // Run once after updating Code.gs to add currency + exchangeRate columns to existing Transactions sheet.

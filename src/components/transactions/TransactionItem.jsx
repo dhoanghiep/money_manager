@@ -8,17 +8,22 @@ import { formatCurrency } from '../../utils/currencyFormatter.js'
 import { formatDisplay } from '../../utils/dateHelpers.js'
 
 export function TransactionItem({ transaction, showDate = false }) {
-  const { categories, accounts, removeTransaction } = useApp()
+  const { categories, accounts, removeTransaction, removeTransfer } = useApp()
   const { defaultCurrency } = useCurrency()
   const toast = useToast()
   const [editOpen, setEditOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  const isTransfer = transaction.type === 'transfer'
   const category = categories.find(c => c.id === transaction.categoryId)
   const subCategory = categories.find(c => c.id === transaction.subCategoryId)
   const account = accounts.find(a => a.id === transaction.accountId)
   const subAccount = accounts.find(a => a.id === transaction.subAccountId)
+  // Transfer direction: is money leaving this account?
+  const transferOut = isTransfer && transaction.accountId === transaction.fromAccountId
+  const counterpartId = isTransfer ? (transferOut ? transaction.toAccountId : transaction.fromAccountId) : null
+  const counterpart = accounts.find(a => a.id === counterpartId)
   const isIncome = transaction.type === 'income'
 
   const txCurrency = transaction.currency || defaultCurrency
@@ -29,8 +34,13 @@ export function TransactionItem({ transaction, showDate = false }) {
   async function handleDelete() {
     setDeleting(true)
     try {
-      await removeTransaction(transaction.id)
-      toast.show({ message: 'Transaction deleted' })
+      if (isTransfer && transaction.transferId) {
+        await removeTransfer(transaction.transferId)
+        toast.show({ message: 'Transfer deleted' })
+      } else {
+        await removeTransaction(transaction.id)
+        toast.show({ message: 'Transaction deleted' })
+      }
     } catch (err) {
       toast.show({ message: err.message, type: 'error' })
     } finally {
@@ -43,30 +53,50 @@ export function TransactionItem({ transaction, showDate = false }) {
     <>
       <div
         className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 active:bg-gray-100 dark:active:bg-gray-800 transition cursor-pointer"
-        onClick={() => setEditOpen(true)}
+        onClick={() => !isTransfer && setEditOpen(true)}
       >
-        {/* Category icon */}
+        {/* Icon */}
         <div
           className="w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0"
-          style={{ backgroundColor: category ? category.color + '20' : '#6B728020' }}
+          style={{ backgroundColor: isTransfer ? '#6366F120' : (category ? category.color + '20' : '#6B728020') }}
         >
-          {category ? category.icon : '📦'}
+          {isTransfer ? '⇄' : (category ? category.icon : '📦')}
         </div>
 
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
-              {category ? category.name : 'Uncategorized'}
-              {category && (
-                <span className="text-gray-400 dark:text-gray-500 font-normal">
-                  {' › '}{subCategory ? subCategory.name : 'General'}
-                </span>
+              {isTransfer ? (
+                <>
+                  <span className="text-gray-400 dark:text-gray-500 font-normal text-xs">
+                    {transferOut ? 'To' : 'From'}
+                  </span>
+                  {' '}{counterpart ? `${counterpart.icon} ${counterpart.name}` : 'Unknown'}
+                </>
+              ) : (
+                <>
+                  {category ? category.name : 'Uncategorized'}
+                  {category && (
+                    <span className="text-gray-400 dark:text-gray-500 font-normal">
+                      {' › '}{subCategory ? subCategory.name : 'General'}
+                    </span>
+                  )}
+                </>
               )}
             </span>
             <div className="flex flex-col items-end flex-shrink-0">
-              <span className={`font-semibold text-sm ${isIncome ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                {isIncome ? '+' : '-'}{isForeign
+              <span className={`font-semibold text-sm ${
+                isTransfer
+                  ? transferOut
+                    ? 'text-red-500 dark:text-red-400'
+                    : 'text-green-600 dark:text-green-400'
+                  : isIncome
+                    ? 'text-green-600 dark:text-green-400'
+                    : 'text-red-500 dark:text-red-400'
+              }`}>
+                {isTransfer ? (transferOut ? '-' : '+') : (isIncome ? '+' : '-')}
+                {isForeign
                   ? formatCurrency(transaction.amount, txCurrency)
                   : formatCurrency(transaction.amount, defaultCurrency)
                 }
@@ -79,13 +109,19 @@ export function TransactionItem({ transaction, showDate = false }) {
             </div>
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            {account && (
+            {isTransfer ? (
               <span className="text-xs text-gray-400 dark:text-gray-500">
-                {account.icon} {account.name}
-                {subAccount && (
-                  <span className="text-gray-300 dark:text-gray-600">{' › '}{subAccount.name}</span>
-                )}
+                {account?.icon} {account?.name} {transferOut ? '→' : '←'} {counterpart?.icon} {counterpart?.name}
               </span>
+            ) : (
+              account && (
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                  {account.icon} {account.name}
+                  {subAccount && (
+                    <span className="text-gray-300 dark:text-gray-600">{' › '}{subAccount.name}</span>
+                  )}
+                </span>
+              )
             )}
             {transaction.note && (
               <span className="text-xs text-gray-400 dark:text-gray-500 truncate">
