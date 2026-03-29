@@ -76,6 +76,9 @@ function doPost(e) {
       case 'deleteCategory':
         result = deleteCategory(id);
         break;
+      case 'reorderCategories':
+        result = reorderCategories(body.ids);
+        break;
       case 'addAccount':
         result = addAccount(data);
         break;
@@ -216,6 +219,35 @@ function deleteCategory(id) {
   return { error: 'Category not found: ' + id };
 }
 
+function reorderCategories(ids) {
+  const sheet = getSheet(SHEET_NAMES.CATEGORIES);
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  const data = rows.slice(1);
+  const idCol = headers.indexOf('id');
+
+  // Build id -> row map
+  const rowMap = {};
+  data.forEach(function(row) { rowMap[row[idCol]] = row; });
+
+  // Clear all data rows
+  if (sheet.getLastRow() > 1) {
+    sheet.deleteRows(2, sheet.getLastRow() - 1);
+  }
+
+  // Re-append in new order (skip unknown ids)
+  ids.forEach(function(id) {
+    if (rowMap[id]) sheet.appendRow(rowMap[id]);
+  });
+
+  // Append any rows not in the ids list at the end
+  data.forEach(function(row) {
+    if (ids.indexOf(row[idCol]) === -1) sheet.appendRow(row);
+  });
+
+  return { ok: true };
+}
+
 // ── Accounts ──────────────────────────────────────────────────
 
 function getAccounts() {
@@ -350,6 +382,28 @@ function seedAccounts() {
   defaults.forEach(function (row) {
     sheet.appendRow(row);
   });
+}
+
+// ── Fix Headers (run once if headers are missing) ─────────────
+// Run this if you seeded data before running setupSheets().
+// It inserts the correct header row at row 1 of each sheet.
+
+function fixHeaders() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  function insertHeaders(name, headers) {
+    const sheet = ss.getSheetByName(name);
+    if (!sheet) { Logger.log('Sheet not found: ' + name); return; }
+    sheet.insertRowBefore(1);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    Logger.log('Headers fixed for: ' + name);
+  }
+
+  insertHeaders('Transactions', ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt']);
+  insertHeaders('Categories',   ['id', 'name', 'color', 'icon', 'type', 'isDefault']);
+  insertHeaders('Accounts',     ['id', 'name', 'color', 'icon', 'type', 'initialBalance', 'isDefault']);
+
+  Logger.log('All headers fixed!');
 }
 
 // ── Sheet Setup Helper ────────────────────────────────────────

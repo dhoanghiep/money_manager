@@ -149,6 +149,13 @@ export function AppProvider({ children }) {
     dispatch({ type: 'REMOVE_CATEGORY', payload: id })
   }
 
+  async function reorderCategories(orderedIds) {
+    // Optimistic update first
+    const ordered = orderedIds.map(id => state.categories.find(c => c.id === id)).filter(Boolean)
+    dispatch({ type: 'SET_CATEGORIES', payload: ordered })
+    await api.reorderCategories(orderedIds)
+  }
+
   async function addAccount(data) {
     const res = await api.addAccount(data)
     const newAcc = { ...data, id: res.id, isDefault: false }
@@ -179,6 +186,7 @@ export function AppProvider({ children }) {
     addCategory,
     editCategory,
     removeCategory,
+    reorderCategories,
     addAccount,
     editAccount,
     removeAccount,

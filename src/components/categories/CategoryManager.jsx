@@ -75,10 +75,11 @@ function CategoryForm({ category, onClose }) {
 }
 
 export function CategoryManager() {
-  const { categories, removeCategory } = useApp()
+  const { categories, removeCategory, reorderCategories } = useApp()
   const toast = useToast()
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
+  const [reordering, setReordering] = useState(false)
 
   async function handleDelete(cat) {
     if (!confirm(`Delete "${cat.name}"?`)) return
@@ -90,8 +91,25 @@ export function CategoryManager() {
     }
   }
 
+  async function move(index, direction) {
+    const next = [...categories]
+    const target = index + direction
+    if (target < 0 || target >= next.length) return
+    ;[next[index], next[target]] = [next[target], next[index]]
+    setReordering(true)
+    try {
+      await reorderCategories(next.map(c => c.id))
+    } catch (err) {
+      toast.show({ message: err.message, type: 'error' })
+    } finally {
+      setReordering(false)
+    }
+  }
+
   const byType = { expense: [], income: [], both: [] }
-  categories.forEach(c => { if (byType[c.type]) byType[c.type].push(c) })
+  categories.forEach((c, i) => {
+    if (byType[c.type]) byType[c.type].push({ ...c, _index: i })
+  })
 
   return (
     <div>
@@ -101,8 +119,22 @@ export function CategoryManager() {
             <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide bg-gray-50 dark:bg-gray-900/50">
               {label}
             </div>
-            {byType[t].map(cat => (
-              <div key={cat.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+            {byType[t].map((cat, i) => (
+              <div key={cat.id} className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                {/* Reorder buttons */}
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    disabled={reordering || cat._index === 0}
+                    onClick={() => move(cat._index, -1)}
+                    className="text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-20 transition leading-none text-xs"
+                  >▲</button>
+                  <button
+                    disabled={reordering || cat._index === categories.length - 1}
+                    onClick={() => move(cat._index, 1)}
+                    className="text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-20 transition leading-none text-xs"
+                  >▼</button>
+                </div>
+
                 <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
                   style={{ backgroundColor: cat.color + '20' }}>
                   {cat.icon}

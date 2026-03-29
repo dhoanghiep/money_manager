@@ -1,12 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useToast } from '../ui/Toast.jsx'
 import { Button } from '../ui/Button.jsx'
 import { Input, Select, Textarea } from '../ui/Input.jsx'
 import { toDateString, today } from '../../utils/dateHelpers.js'
-
-const INCOME_COLOR = '#22C55E'
-const EXPENSE_COLOR = '#EF4444'
 
 export function TransactionForm({ transaction, onClose }) {
   const { categories, accounts, addTransaction, editTransaction } = useApp()
@@ -18,6 +15,14 @@ export function TransactionForm({ transaction, onClose }) {
   const [date, setDate] = useState(transaction?.date || toDateString(today()))
   const [categoryId, setCategoryId] = useState(transaction?.categoryId || '')
   const [accountId, setAccountId] = useState(transaction?.accountId || '')
+
+  // Default to bank account when accounts load (only for new transactions)
+  useEffect(() => {
+    if (!isEdit && !transaction?.accountId && accounts.length > 0 && !accountId) {
+      const bank = accounts.find(a => a.type === 'bank') ?? accounts[0]
+      if (bank) setAccountId(bank.id)
+    }
+  }, [accounts])
   const [note, setNote] = useState(transaction?.note || '')
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})

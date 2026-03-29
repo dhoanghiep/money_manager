@@ -72,6 +72,10 @@ export const api = {
     return request('POST', {}, { action: 'deleteCategory', id })
   },
 
+  reorderCategories(ids) {
+    return request('POST', {}, { action: 'reorderCategories', ids })
+  },
+
   // ── Accounts ──────────────────────────────────────────────
   getAccounts() {
     return request('GET', { action: 'getAccounts' })

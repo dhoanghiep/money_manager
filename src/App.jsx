@@ -21,8 +21,8 @@ function AppShell() {
       <HashRouter>
         <div className="max-w-lg mx-auto relative min-h-screen">
           <Routes>
-            <Route path="/"             element={<DashboardPage />} />
-            <Route path="/calendar"     element={<CalendarPage />} />
+            <Route path="/"             element={<CalendarPage />} />
+            <Route path="/dashboard"    element={<DashboardPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/settings"     element={<SettingsPage />} />
           </Routes>
