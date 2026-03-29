@@ -552,10 +552,11 @@ function applyDueSchedules() {
 function advanceDate(dateStr, frequency) {
   const d = new Date(dateStr + 'T12:00:00'); // noon to avoid DST shifts
   switch (frequency) {
-    case 'daily':   d.setDate(d.getDate() + 1);         break;
-    case 'weekly':  d.setDate(d.getDate() + 7);         break;
-    case 'monthly': d.setMonth(d.getMonth() + 1);       break;
-    case 'yearly':  d.setFullYear(d.getFullYear() + 1); break;
+    case 'daily':     d.setDate(d.getDate() + 1);         break;
+    case 'weekly':    d.setDate(d.getDate() + 7);         break;
+    case 'biweekly':  d.setDate(d.getDate() + 14);        break;
+    case 'monthly':   d.setMonth(d.getMonth() + 1);       break;
+    case 'yearly':    d.setFullYear(d.getFullYear() + 1); break;
   }
   return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }

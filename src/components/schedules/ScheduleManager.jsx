@@ -9,10 +9,11 @@ import { formatDisplay, toDateString, today } from '../../utils/dateHelpers.js'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
 
 const FREQUENCIES = [
-  { value: 'daily',   label: 'Daily' },
-  { value: 'weekly',  label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'yearly',  label: 'Yearly' },
+  { value: 'daily',     label: 'Daily'      },
+  { value: 'weekly',    label: 'Weekly'     },
+  { value: 'biweekly',  label: 'Biweekly'   },
+  { value: 'monthly',   label: 'Monthly'    },
+  { value: 'yearly',    label: 'Yearly'     },
 ]
 
 // ── Schedule Form ─────────────────────────────────────────────
@@ -132,8 +133,8 @@ function ScheduleForm({ schedule, onClose }) {
 
 // ── Schedule Manager ──────────────────────────────────────────
 
-const FREQ_LABEL = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' }
-const FREQ_ICON  = { daily: '📆', weekly: '🗓', monthly: '📅', yearly: '🗃' }
+const FREQ_LABEL = { daily: 'Daily', weekly: 'Weekly', biweekly: 'Biweekly', monthly: 'Monthly', yearly: 'Yearly' }
+const FREQ_ICON  = { daily: '📆', weekly: '🗓', biweekly: '🗓', monthly: '📅', yearly: '🗃' }
 
 export function ScheduleManager() {
   const { schedules, categories, accounts, removeSchedule, editSchedule } = useApp()
