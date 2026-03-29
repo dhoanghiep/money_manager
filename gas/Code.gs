@@ -16,6 +16,7 @@ const SHEET_NAMES = {
   TRANSACTIONS: 'Transactions',
   CATEGORIES: 'Categories',
   ACCOUNTS: 'Accounts',
+  SCHEDULES: 'Schedules',
 };
 
 // ── Entry Points ─────────────────────────────────────────────
@@ -33,6 +34,12 @@ function doGet(e) {
         break;
       case 'getAccounts':
         result = getAccounts();
+        break;
+      case 'getSchedules':
+        result = getSchedules();
+        break;
+      case 'applyDueSchedules':
+        result = applyDueSchedules();
         break;
       case 'ping':
         result = { ok: true, timestamp: new Date().toISOString() };
@@ -87,6 +94,15 @@ function doPost(e) {
         break;
       case 'deleteAccount':
         result = deleteAccount(id);
+        break;
+      case 'addSchedule':
+        result = addSchedule(data);
+        break;
+      case 'updateSchedule':
+        result = updateSchedule(id, data);
+        break;
+      case 'deleteSchedule':
+        result = deleteSchedule(id);
         break;
       default:
         result = { error: 'Unknown action: ' + action };
@@ -384,6 +400,136 @@ function seedAccounts() {
   });
 }
 
+// ── Schedules ─────────────────────────────────────────────────
+// Columns: id | name | amount | type | categoryId | accountId | note | frequency | startDate | nextDate | endDate | isActive | createdAt
+
+function getSchedules() {
+  return { data: sheetToObjects(getSheet(SHEET_NAMES.SCHEDULES)) };
+}
+
+function addSchedule(data) {
+  const sheet = getSheet(SHEET_NAMES.SCHEDULES);
+  const id = generateId('sch');
+  const now = new Date().toISOString();
+  sheet.appendRow([
+    id,
+    data.name || '',
+    data.amount,
+    data.type,
+    data.categoryId || '',
+    data.accountId || '',
+    data.note || '',
+    data.frequency,
+    data.startDate,
+    data.startDate,   // nextDate starts as startDate
+    data.endDate || '',
+    true,             // isActive
+    now,
+  ]);
+  return { ok: true, id: id };
+}
+
+function updateSchedule(id, data) {
+  const sheet = getSheet(SHEET_NAMES.SCHEDULES);
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  const idCol = headers.indexOf('id');
+
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][idCol] === id) {
+      const rowNum = i + 1;
+      const fields = ['name','amount','type','categoryId','accountId','note','frequency','startDate','nextDate','endDate','isActive'];
+      fields.forEach(function(f) {
+        if (data[f] !== undefined) {
+          sheet.getRange(rowNum, headers.indexOf(f) + 1).setValue(data[f]);
+        }
+      });
+      return { ok: true };
+    }
+  }
+  return { error: 'Schedule not found: ' + id };
+}
+
+function deleteSchedule(id) {
+  const sheet = getSheet(SHEET_NAMES.SCHEDULES);
+  const rows = sheet.getDataRange().getValues();
+  const idCol = rows[0].indexOf('id');
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][idCol] === id) {
+      sheet.deleteRow(i + 1);
+      return { ok: true };
+    }
+  }
+  return { error: 'Schedule not found: ' + id };
+}
+
+// Called on app load — creates transactions for any overdue schedules
+// and advances their nextDate forward until it's in the future.
+function applyDueSchedules() {
+  const tz = Session.getScriptTimeZone();
+  const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+
+  const schedSheet = getSheet(SHEET_NAMES.SCHEDULES);
+  const txSheet = getSheet(SHEET_NAMES.TRANSACTIONS);
+  const rows = schedSheet.getDataRange().getValues();
+  const headers = rows[0];
+
+  const col = {};
+  headers.forEach(function(h, i) { col[h] = i; });
+
+  const applied = [];
+
+  for (var i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row[col['isActive']]) continue;
+
+    const endDate = row[col['endDate']];
+    if (endDate && endDate <= today) continue;  // schedule expired
+
+    var nextDate = row[col['nextDate']];
+    if (!nextDate || nextDate > today) continue;
+
+    const frequency = row[col['frequency']];
+
+    // Apply all missed periods up to and including today
+    while (nextDate <= today) {
+      if (endDate && nextDate > endDate) break;
+
+      const now = new Date().toISOString();
+      const txId = generateId('txn');
+      txSheet.appendRow([
+        txId,
+        nextDate,
+        row[col['amount']],
+        row[col['type']],
+        row[col['categoryId']] || '',
+        row[col['accountId']] || '',
+        row[col['note']] || '',
+        now,
+        now,
+      ]);
+      applied.push({ scheduleId: row[col['id']], transactionId: txId, date: nextDate });
+      nextDate = advanceDate(nextDate, frequency);
+    }
+
+    // Save updated nextDate back to sheet
+    schedSheet.getRange(i + 1, col['nextDate'] + 1).setValue(nextDate);
+  }
+
+  return { ok: true, applied: applied };
+}
+
+function advanceDate(dateStr, frequency) {
+  const d = new Date(dateStr + 'T12:00:00'); // noon to avoid DST shifts
+  switch (frequency) {
+    case 'daily':   d.setDate(d.getDate() + 1);         break;
+    case 'weekly':  d.setDate(d.getDate() + 7);         break;
+    case 'monthly': d.setMonth(d.getMonth() + 1);       break;
+    case 'yearly':  d.setFullYear(d.getFullYear() + 1); break;
+  }
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
 // ── Fix Headers (run once if headers are missing) ─────────────
 // Run this if you seeded data before running setupSheets().
 // It inserts the correct header row at row 1 of each sheet.
@@ -426,6 +572,7 @@ function setupSheets() {
   ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt']);
   ensureSheet(SHEET_NAMES.CATEGORIES,   ['id', 'name', 'color', 'icon', 'type', 'isDefault']);
   ensureSheet(SHEET_NAMES.ACCOUNTS,     ['id', 'name', 'color', 'icon', 'type', 'initialBalance', 'isDefault']);
+  ensureSheet(SHEET_NAMES.SCHEDULES,    ['id', 'name', 'amount', 'type', 'categoryId', 'accountId', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'isActive', 'createdAt']);
 
   Logger.log('Sheets set up successfully!');
 }

@@ -7,7 +7,8 @@ const initialState = {
   transactions: [],       // all loaded transactions
   categories: [],
   accounts: [],
-  loading: { transactions: false, categories: false, accounts: false },
+  schedules: [],
+  loading: { transactions: false, categories: false, accounts: false, schedules: false },
   error: null,
 }
 
@@ -22,6 +23,14 @@ function reducer(state, action) {
       return { ...state, categories: action.payload }
     case 'SET_ACCOUNTS':
       return { ...state, accounts: action.payload }
+    case 'SET_SCHEDULES':
+      return { ...state, schedules: action.payload }
+    case 'ADD_SCHEDULE':
+      return { ...state, schedules: [...state.schedules, action.payload] }
+    case 'UPDATE_SCHEDULE':
+      return { ...state, schedules: state.schedules.map(s => s.id === action.payload.id ? action.payload : s) }
+    case 'REMOVE_SCHEDULE':
+      return { ...state, schedules: state.schedules.filter(s => s.id !== action.payload) }
     case 'SET_TRANSACTIONS':
       return { ...state, transactions: action.payload }
     case 'ADD_TRANSACTIONS':
@@ -71,6 +80,8 @@ export function AppProvider({ children }) {
   useEffect(() => {
     loadCategories()
     loadAccounts()
+    loadSchedules()
+    applyDueSchedulesOnLoad()
     const { start, end } = getMonthRange(new Date())
     loadTransactions(start, end)
   }, [])
@@ -84,6 +95,33 @@ export function AppProvider({ children }) {
       dispatch({ type: 'SET_ERROR', payload: e.message })
     } finally {
       dispatch({ type: 'SET_LOADING', payload: { categories: false } })
+    }
+  }
+
+  async function loadSchedules() {
+    dispatch({ type: 'SET_LOADING', payload: { schedules: true } })
+    try {
+      const res = await api.getSchedules()
+      dispatch({ type: 'SET_SCHEDULES', payload: res.data || [] })
+    } catch (e) {
+      console.warn('Failed to load schedules:', e.message)
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: { schedules: false } })
+    }
+  }
+
+  // Runs on mount — GAS checks all active schedules and creates any overdue transactions
+  async function applyDueSchedulesOnLoad() {
+    try {
+      const res = await api.applyDueSchedules()
+      if (res.applied && res.applied.length > 0) {
+        // Reload transactions so the new ones appear
+        const { start, end } = getMonthRange(new Date())
+        loadTransactions(start, end)
+        loadSchedules() // refresh nextDate values
+      }
+    } catch (e) {
+      console.warn('applyDueSchedules failed:', e.message)
     }
   }
 
@@ -156,6 +194,25 @@ export function AppProvider({ children }) {
     await api.reorderCategories(orderedIds)
   }
 
+  async function addSchedule(data) {
+    const res = await api.addSchedule(data)
+    const newSch = { ...data, id: res.id, isActive: true, nextDate: data.startDate, createdAt: new Date().toISOString() }
+    dispatch({ type: 'ADD_SCHEDULE', payload: newSch })
+    return newSch
+  }
+
+  async function editSchedule(id, data) {
+    await api.updateSchedule(id, data)
+    const updated = { ...state.schedules.find(s => s.id === id), ...data }
+    dispatch({ type: 'UPDATE_SCHEDULE', payload: updated })
+    return updated
+  }
+
+  async function removeSchedule(id) {
+    await api.deleteSchedule(id)
+    dispatch({ type: 'REMOVE_SCHEDULE', payload: id })
+  }
+
   async function addAccount(data) {
     const res = await api.addAccount(data)
     const newAcc = { ...data, id: res.id, isDefault: false }
@@ -180,6 +237,10 @@ export function AppProvider({ children }) {
     loadTransactions,
     loadCategories,
     loadAccounts,
+    loadSchedules,
+    addSchedule,
+    editSchedule,
+    removeSchedule,
     addTransaction,
     editTransaction,
     removeTransaction,

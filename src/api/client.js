@@ -93,6 +93,27 @@ export const api = {
     return request('POST', {}, { action: 'deleteAccount', id })
   },
 
+  // ── Schedules ─────────────────────────────────────────────
+  getSchedules() {
+    return request('GET', { action: 'getSchedules' })
+  },
+
+  addSchedule(data) {
+    return request('POST', {}, { action: 'addSchedule', data })
+  },
+
+  updateSchedule(id, data) {
+    return request('POST', {}, { action: 'updateSchedule', id, data })
+  },
+
+  deleteSchedule(id) {
+    return request('POST', {}, { action: 'deleteSchedule', id })
+  },
+
+  applyDueSchedules() {
+    return request('GET', { action: 'applyDueSchedules' })
+  },
+
   ping() {
     return request('GET', { action: 'ping' })
   },
