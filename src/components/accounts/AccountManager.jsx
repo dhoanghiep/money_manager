@@ -4,6 +4,10 @@ import { useApp } from '../../context/AppContext.jsx'
 const DEFAULT_ACCOUNT_KEY = 'mm_default_account_id'
 export function getDefaultAccountId() { return localStorage.getItem(DEFAULT_ACCOUNT_KEY) || '' }
 export function setDefaultAccountId(id) { localStorage.setItem(DEFAULT_ACCOUNT_KEY, id) }
+
+const DEFAULT_SUBACCOUNT_KEY = 'mm_default_subaccount_'
+export function getDefaultSubAccountId(parentId) { return localStorage.getItem(DEFAULT_SUBACCOUNT_KEY + parentId) || '' }
+export function setDefaultSubAccountId(parentId, id) { localStorage.setItem(DEFAULT_SUBACCOUNT_KEY + parentId, id) }
 import { useToast } from '../ui/Toast.jsx'
 import { Button } from '../ui/Button.jsx'
 import { Input, Select } from '../ui/Input.jsx'
@@ -101,11 +105,22 @@ export function AccountManager() {
   const [addSubParentId, setAddSubParentId] = useState(null)
   const [expandedIds, setExpandedIds] = useState(new Set())
   const [defaultId, setDefaultId] = useState(getDefaultAccountId)
+  const [defaultSubIds, setDefaultSubIds] = useState({}) // { [parentId]: subAccountId }
 
   function handleSetDefault(id) {
     setDefaultAccountId(id)
     setDefaultId(id)
     toast.show({ message: 'Default account updated' })
+  }
+
+  function handleSetDefaultSub(parentId, subId) {
+    setDefaultSubAccountId(parentId, subId)
+    setDefaultSubIds(prev => ({ ...prev, [parentId]: subId }))
+    toast.show({ message: 'Default sub-account updated' })
+  }
+
+  function getDefaultSub(parentId) {
+    return defaultSubIds[parentId] ?? getDefaultSubAccountId(parentId)
   }
 
   function toggleExpand(id) {
@@ -214,20 +229,35 @@ export function AccountManager() {
             </div>
 
             {/* Sub-accounts (expanded) */}
-            {expanded && subs.map(sub => (
-              <div key={sub.id} className="flex items-center gap-2 pl-10 pr-4 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20">
-                <div className="w-1 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0"
-                  style={{ backgroundColor: sub.color + '20' }}>
-                  {sub.icon}
+            {expanded && subs.map(sub => {
+              const isDefaultSub = getDefaultSub(acc.id) === sub.id
+              return (
+                <div key={sub.id} className="flex items-center gap-2 pl-10 pr-4 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20">
+                  <div className="w-1 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0"
+                    style={{ backgroundColor: sub.color + '20' }}>
+                    {sub.icon}
+                  </div>
+                  <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{sub.name}</span>
+                    {isDefaultSub && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 leading-none">
+                        default
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleSetDefaultSub(acc.id, sub.id)}
+                    title={isDefaultSub ? 'Default sub-account' : 'Set as default sub-account'}
+                    className={`p-1 transition text-sm leading-none ${isDefaultSub ? 'text-yellow-400' : 'text-gray-200 dark:text-gray-700 hover:text-yellow-400'}`}
+                  >★</button>
+                  <button onClick={() => openEdit(sub)}
+                    className="p-1 text-gray-400 hover:text-indigo-600 transition text-sm">✏️</button>
+                  <button onClick={() => handleDelete(sub)}
+                    className="p-1 text-gray-400 hover:text-red-500 transition text-sm">🗑</button>
                 </div>
-                <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">{sub.name}</span>
-                <button onClick={() => openEdit(sub)}
-                  className="p-1 text-gray-400 hover:text-indigo-600 transition text-sm">✏️</button>
-                <button onClick={() => handleDelete(sub)}
-                  className="p-1 text-gray-400 hover:text-red-500 transition text-sm">🗑</button>
-              </div>
-            ))}
+              )
+            })}
 
             {/* "Default" placeholder when expanded and has subs */}
             {expanded && subs.length > 0 && (

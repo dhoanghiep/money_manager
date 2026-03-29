@@ -7,7 +7,7 @@ import { Button } from '../ui/Button.jsx'
 import { Input, Select, Textarea } from '../ui/Input.jsx'
 import { toDateString, today } from '../../utils/dateHelpers.js'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
-import { getDefaultAccountId } from '../accounts/AccountManager.jsx'
+import { getDefaultAccountId, getDefaultSubAccountId } from '../accounts/AccountManager.jsx'
 
 export function TransactionForm({ transaction, onClose }) {
   const { categories, accounts, addTransaction, editTransaction, topLevelCategories, subCategoriesOf, topLevelAccounts, subAccountsOf } = useApp()
@@ -54,8 +54,12 @@ export function TransactionForm({ transaction, onClose }) {
   // Reset sub-category when parent category changes
   useEffect(() => { setSubCategoryId('') }, [categoryId])
 
-  // Reset sub-account when parent account changes
-  useEffect(() => { setSubAccountId('') }, [accountId])
+  // Auto-select default sub-account when parent account changes
+  useEffect(() => {
+    if (!accountId) { setSubAccountId(''); return }
+    const savedSub = getDefaultSubAccountId(accountId)
+    setSubAccountId(savedSub || '')
+  }, [accountId])
 
   const filteredCategories = topLevelCategories.filter(c => c.type === type || c.type === 'both')
   const availableSubCategories = categoryId ? subCategoriesOf(categoryId) : []
