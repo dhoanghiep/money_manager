@@ -9,6 +9,7 @@ import { CalendarPage } from './pages/CalendarPage.jsx'
 import { TransactionsPage } from './pages/TransactionsPage.jsx'
 import { SettingsPage } from './pages/SettingsPage.jsx'
 import { SchedulesPage } from './pages/SchedulesPage.jsx'
+import { AccountDetailPage } from './pages/AccountDetailPage.jsx'
 import { PasswordGate, usePasswordGate } from './components/PasswordGate.jsx'
 
 function AppShell() {
@@ -28,6 +29,7 @@ function AppShell() {
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/schedules"    element={<SchedulesPage />} />
             <Route path="/settings"     element={<SettingsPage />} />
+            <Route path="/accounts/:id" element={<AccountDetailPage />} />
           </Routes>
           <BottomNav />
         </div>

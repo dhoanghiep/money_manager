@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext.jsx'
 
 const DEFAULT_ACCOUNT_KEY = 'mm_default_account_id'
@@ -100,6 +101,7 @@ function AccountForm({ account, parentId, onClose }) {
 export function AccountManager() {
   const { topLevelAccounts, subAccountsOf, removeAccount } = useApp()
   const toast = useToast()
+  const navigate = useNavigate()
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [addSubParentId, setAddSubParentId] = useState(null)
@@ -174,7 +176,10 @@ export function AccountManager() {
         return (
           <div key={acc.id}>
             {/* Parent account row */}
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+            <div
+              className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+              onClick={() => navigate(`/accounts/${acc.id}`)}
+            >
               <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
                 style={{ backgroundColor: acc.color + '20' }}>
                 {acc.icon}
@@ -199,7 +204,7 @@ export function AccountManager() {
 
               {/* Expand toggle */}
               {subs.length > 0 && (
-                <button onClick={() => toggleExpand(acc.id)}
+                <button onClick={e => { e.stopPropagation(); toggleExpand(acc.id) }}
                   className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition text-xs">
                   {expanded ? '▾' : '▸'}
                 </button>
@@ -207,7 +212,7 @@ export function AccountManager() {
 
               {/* Default star */}
               <button
-                onClick={() => handleSetDefault(acc.id)}
+                onClick={e => { e.stopPropagation(); handleSetDefault(acc.id) }}
                 title={defaultId === acc.id ? 'Default account' : 'Set as default'}
                 className={`p-1.5 transition text-base leading-none ${
                   defaultId === acc.id
@@ -218,12 +223,12 @@ export function AccountManager() {
                 ★
               </button>
 
-              <button onClick={() => openAddSub(acc.id)}
+              <button onClick={e => { e.stopPropagation(); openAddSub(acc.id) }}
                 className="p-1.5 text-gray-400 hover:text-indigo-500 transition text-sm" title="Add sub-account">⊕</button>
-              <button onClick={() => openEdit(acc)}
+              <button onClick={e => { e.stopPropagation(); openEdit(acc) }}
                 className="p-1.5 text-gray-400 hover:text-indigo-600 transition">✏️</button>
               {!acc.isDefault && (
-                <button onClick={() => handleDelete(acc)}
+                <button onClick={e => { e.stopPropagation(); handleDelete(acc) }}
                   className="p-1.5 text-gray-400 hover:text-red-500 transition">🗑</button>
               )}
             </div>
