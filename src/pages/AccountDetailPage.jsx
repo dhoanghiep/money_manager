@@ -48,6 +48,7 @@ export function AccountDetailPage() {
   const [refDate, setRefDate] = useState(today())
   const [activeSubId, setActiveSubId] = useState('all')
   const [addOpen, setAddOpen] = useState(false)
+  const [multiCurrency, setMultiCurrency] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -91,6 +92,25 @@ export function AccountDetailPage() {
 
   const income = useMemo(() => sumIncome(periodTxns), [periodTxns])
   const expense = useMemo(() => sumExpense(periodTxns), [periodTxns])
+
+  // Per-currency raw balances (un-converted) from all-time tabTxns
+  const currencyBalances = useMemo(() => {
+    const map = {}
+    const base = activeSubId === 'all' ? (Number(account?.initialBalance) || 0) : 0
+    if (base !== 0) map[defaultCurrency] = (map[defaultCurrency] || 0) + base
+    tabTxns.forEach(t => {
+      if (t.type === 'transfer') return
+      const curr = (t.currency && t.currency !== '') ? t.currency : defaultCurrency
+      const amt = Number(t.amount) || 0
+      if (t.type === 'income')  map[curr] = (map[curr] || 0) + amt
+      if (t.type === 'expense') map[curr] = (map[curr] || 0) - amt
+    })
+    return Object.entries(map).sort(([ca], [cb]) => {
+      if (ca === defaultCurrency) return -1
+      if (cb === defaultCurrency) return 1
+      return 0
+    })
+  }, [tabTxns, account, activeSubId, defaultCurrency])
 
   function navigate_period(dir) {
     if (period === 'all') return
@@ -141,13 +161,36 @@ export function AccountDetailPage() {
           className="mx-4 mt-4 rounded-2xl px-5 py-4"
           style={{ backgroundColor: account.color + '18', borderColor: account.color + '30', borderWidth: 1 }}
         >
-          <p className="text-xs font-medium mb-1" style={{ color: account.color }}>
-            {activeSubId === 'all' ? 'Current Balance' : `Balance · ${accounts.find(a => a.id === activeSubId)?.name}`}
-          </p>
-          <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-            {formatCurrency(balance, defaultCurrency)}
-          </p>
-          {loadingTxns && <p className="text-xs text-gray-400 mt-1">Loading…</p>}
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-medium" style={{ color: account.color }}>
+              {activeSubId === 'all' ? 'Current Balance' : `Balance · ${accounts.find(a => a.id === activeSubId)?.name}`}
+            </p>
+            <button
+              onClick={() => setMultiCurrency(v => !v)}
+              className="text-[11px] font-semibold px-2 py-0.5 rounded-full transition text-white/80 hover:text-white"
+              style={{ backgroundColor: account.color + '60' }}
+            >
+              {multiCurrency ? `⇄ ${defaultCurrency} only` : '⇄ By currency'}
+            </button>
+          </div>
+          {loadingTxns ? (
+            <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 opacity-40">…</p>
+          ) : multiCurrency ? (
+            <div className="flex flex-col gap-1 mt-1">
+              {currencyBalances.map(([curr, amt]) => (
+                <div key={curr} className="flex items-baseline justify-between">
+                  <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{curr}</span>
+                  <span className={`text-xl font-bold ${amt >= 0 ? 'text-gray-900 dark:text-gray-100' : 'text-red-500'}`}>
+                    {formatCurrency(Math.abs(amt), curr)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+              {formatCurrency(balance, defaultCurrency)}
+            </p>
+          )}
         </div>
 
         {/* Sub-account tabs */}

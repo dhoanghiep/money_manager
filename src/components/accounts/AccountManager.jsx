@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext.jsx'
 
 const DEFAULT_ACCOUNT_KEY = 'mm_default_account_id'
@@ -101,7 +100,6 @@ function AccountForm({ account, parentId, onClose }) {
 export function AccountManager() {
   const { topLevelAccounts, subAccountsOf, removeAccount } = useApp()
   const toast = useToast()
-  const navigate = useNavigate()
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [addSubParentId, setAddSubParentId] = useState(null)
@@ -178,7 +176,7 @@ export function AccountManager() {
             {/* Parent account row */}
             <div
               className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
-              onClick={() => navigate(`/accounts/${acc.id}`)}
+              onClick={() => subs.length > 0 ? toggleExpand(acc.id) : null}
             >
               <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
                 style={{ backgroundColor: acc.color + '20' }}>
@@ -202,12 +200,11 @@ export function AccountManager() {
                 </div>
               </div>
 
-              {/* Expand toggle */}
+              {/* Expand indicator */}
               {subs.length > 0 && (
-                <button onClick={e => { e.stopPropagation(); toggleExpand(acc.id) }}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition text-xs">
+                <span className="text-xs text-gray-400 dark:text-gray-500 select-none">
                   {expanded ? '▾' : '▸'}
-                </button>
+                </span>
               )}
 
               {/* Default star */}

@@ -26,6 +26,13 @@ export function TransactionItem({ transaction, showDate = false }) {
   const counterpart = accounts.find(a => a.id === counterpartId)
   const isIncome = transaction.type === 'income'
 
+  // Hide delete for transactions older than 2 days
+  const canDelete = (() => {
+    const txDate = new Date(transaction.date)
+    const now = new Date()
+    return (now - txDate) / (1000 * 60 * 60 * 24) <= 2
+  })()
+
   const txCurrency = transaction.currency || defaultCurrency
   const isForeign = txCurrency !== defaultCurrency
   const exchangeRate = Number(transaction.exchangeRate) || 1
@@ -136,14 +143,16 @@ export function TransactionItem({ transaction, showDate = false }) {
           </div>
         </div>
 
-        {/* Delete button */}
-        <button
-          className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex-shrink-0"
-          onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
-          title="Delete"
-        >
-          🗑
-        </button>
+        {/* Delete button — only within 2 days */}
+        {canDelete && (
+          <button
+            className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex-shrink-0"
+            onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
+            title="Delete"
+          >
+            🗑
+          </button>
+        )}
       </div>
 
       {/* Edit modal */}
