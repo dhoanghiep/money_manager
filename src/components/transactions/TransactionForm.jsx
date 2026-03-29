@@ -6,7 +6,7 @@ import { Input, Select, Textarea } from '../ui/Input.jsx'
 import { toDateString, today } from '../../utils/dateHelpers.js'
 
 export function TransactionForm({ transaction, onClose }) {
-  const { categories, accounts, addTransaction, editTransaction } = useApp()
+  const { categories, accounts, addTransaction, editTransaction, topLevelCategories, subCategoriesOf } = useApp()
   const toast = useToast()
   const isEdit = !!transaction?.id
 
@@ -14,6 +14,7 @@ export function TransactionForm({ transaction, onClose }) {
   const [amount, setAmount] = useState(transaction?.amount?.toString() || '')
   const [date, setDate] = useState(transaction?.date || toDateString(today()))
   const [categoryId, setCategoryId] = useState(transaction?.categoryId || '')
+  const [subCategoryId, setSubCategoryId] = useState(transaction?.subCategoryId || '')
   const [accountId, setAccountId] = useState(transaction?.accountId || '')
 
   // Default to bank account when accounts load (only for new transactions)
@@ -23,11 +24,15 @@ export function TransactionForm({ transaction, onClose }) {
       if (bank) setAccountId(bank.id)
     }
   }, [accounts])
+
+  // Reset sub-category when parent category changes
+  useEffect(() => { setSubCategoryId('') }, [categoryId])
   const [note, setNote] = useState(transaction?.note || '')
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
 
-  const filteredCategories = categories.filter(c => c.type === type || c.type === 'both')
+  const filteredCategories = topLevelCategories.filter(c => c.type === type || c.type === 'both')
+  const availableSubCategories = categoryId ? subCategoriesOf(categoryId) : []
 
   function validate() {
     const errs = {}
@@ -48,6 +53,7 @@ export function TransactionForm({ transaction, onClose }) {
         amount: Number(amount),
         date,
         categoryId: categoryId || null,
+        subCategoryId: subCategoryId || null,
         accountId: accountId || null,
         note: note.trim(),
       }
@@ -120,6 +126,20 @@ export function TransactionForm({ transaction, onClose }) {
           <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
         ))}
       </Select>
+
+      {/* Sub-category — shown only when a parent category is selected */}
+      {categoryId && (
+        <Select
+          label="Sub-category"
+          value={subCategoryId}
+          onChange={e => setSubCategoryId(e.target.value)}
+        >
+          <option value="">General</option>
+          {availableSubCategories.map(c => (
+            <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+          ))}
+        </Select>
+      )}
 
       {/* Account */}
       <Select

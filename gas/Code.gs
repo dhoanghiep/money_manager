@@ -148,6 +148,7 @@ function addTransaction(data) {
     data.note || '',
     now,
     now,
+    data.subCategoryId || '',
   ]);
   return { ok: true, id: id };
 }
@@ -168,6 +169,9 @@ function updateTransaction(id, data) {
       if (data.categoryId !== undefined) sheet.getRange(rowNum, headers.indexOf('categoryId') + 1).setValue(data.categoryId);
       if (data.accountId !== undefined) sheet.getRange(rowNum, headers.indexOf('accountId') + 1).setValue(data.accountId);
       if (data.note !== undefined) sheet.getRange(rowNum, headers.indexOf('note') + 1).setValue(data.note);
+      if (data.subCategoryId !== undefined && headers.indexOf('subCategoryId') !== -1) {
+        sheet.getRange(rowNum, headers.indexOf('subCategoryId') + 1).setValue(data.subCategoryId || '');
+      }
       sheet.getRange(rowNum, headers.indexOf('updatedAt') + 1).setValue(now);
       return { ok: true };
     }
@@ -198,7 +202,7 @@ function getCategories() {
 function addCategory(data) {
   const sheet = getSheet(SHEET_NAMES.CATEGORIES);
   const id = generateId('cat');
-  sheet.appendRow([id, data.name, data.color || '#6B7280', data.icon || '📁', data.type || 'expense', false]);
+  sheet.appendRow([id, data.name, data.color || '#6B7280', data.icon || '📁', data.type || 'expense', false, data.parentId || '']);
   return { ok: true, id: id };
 }
 
@@ -400,6 +404,31 @@ function seedAccounts() {
   });
 }
 
+// ── Sub-category Column Migration ────────────────────────────
+// Run once after updating Code.gs to add the new columns to existing sheets.
+
+function addSubCategoryColumns() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Add parentId to Categories (column G)
+  var catSheet = ss.getSheetByName('Categories');
+  var catHeaders = catSheet.getRange(1, 1, 1, catSheet.getLastColumn()).getValues()[0];
+  if (catHeaders.indexOf('parentId') === -1) {
+    catSheet.getRange(1, catSheet.getLastColumn() + 1).setValue('parentId');
+    Logger.log('Added parentId column to Categories');
+  }
+
+  // Add subCategoryId to Transactions (column J)
+  var txSheet = ss.getSheetByName('Transactions');
+  var txHeaders = txSheet.getRange(1, 1, 1, txSheet.getLastColumn()).getValues()[0];
+  if (txHeaders.indexOf('subCategoryId') === -1) {
+    txSheet.getRange(1, txSheet.getLastColumn() + 1).setValue('subCategoryId');
+    Logger.log('Added subCategoryId column to Transactions');
+  }
+
+  Logger.log('Migration complete!');
+}
+
 // ── Schedules ─────────────────────────────────────────────────
 // Columns: id | name | amount | type | categoryId | accountId | note | frequency | startDate | nextDate | endDate | isActive | createdAt
 
@@ -507,6 +536,7 @@ function applyDueSchedules() {
         row[col['note']] || '',
         now,
         now,
+        '',  // subCategoryId (schedules don't have sub-category)
       ]);
       applied.push({ scheduleId: row[col['id']], transactionId: txId, date: nextDate });
       nextDate = advanceDate(nextDate, frequency);
@@ -569,8 +599,8 @@ function setupSheets() {
     return sheet;
   }
 
-  ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt']);
-  ensureSheet(SHEET_NAMES.CATEGORIES,   ['id', 'name', 'color', 'icon', 'type', 'isDefault']);
+  ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt', 'subCategoryId']);
+  ensureSheet(SHEET_NAMES.CATEGORIES,   ['id', 'name', 'color', 'icon', 'type', 'isDefault', 'parentId']);
   ensureSheet(SHEET_NAMES.ACCOUNTS,     ['id', 'name', 'color', 'icon', 'type', 'initialBalance', 'isDefault']);
   ensureSheet(SHEET_NAMES.SCHEDULES,    ['id', 'name', 'amount', 'type', 'categoryId', 'accountId', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'isActive', 'createdAt']);
 

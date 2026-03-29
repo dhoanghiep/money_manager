@@ -14,6 +14,7 @@ export function TransactionItem({ transaction, showDate = false }) {
   const [deleting, setDeleting] = useState(false)
 
   const category = categories.find(c => c.id === transaction.categoryId)
+  const subCategory = categories.find(c => c.id === transaction.subCategoryId)
   const account = accounts.find(a => a.id === transaction.accountId)
   const isIncome = transaction.type === 'income'
 
@@ -49,6 +50,11 @@ export function TransactionItem({ transaction, showDate = false }) {
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
               {category ? category.name : 'Uncategorized'}
+              {category && (
+                <span className="text-gray-400 dark:text-gray-500 font-normal">
+                  {' › '}{subCategory ? subCategory.name : 'General'}
+                </span>
+              )}
             </span>
             <span className={`font-semibold text-sm flex-shrink-0 ${isIncome ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
               {isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
