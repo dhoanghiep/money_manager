@@ -5,13 +5,16 @@ import { Button } from '../ui/Button.jsx'
 import { Input, Select } from '../ui/Input.jsx'
 import { Modal } from '../ui/Modal.jsx'
 
-const COLORS = ['#22C55E','#3B82F6','#EF4444','#A855F7','#F59E0B','#14B8A6','#6B7280']
+const COLORS = ['#22C55E','#3B82F6','#EF4444','#A855F7','#F59E0B','#14B8A6','#6B7280','#EC4899','#F97316','#84CC16']
 const ACCOUNT_TYPES = ['cash', 'bank', 'credit', 'investment', 'other']
 
-function AccountForm({ account, onClose }) {
+// ── Account Form ──────────────────────────────────────────────
+
+function AccountForm({ account, parentId, onClose }) {
   const { addAccount, editAccount } = useApp()
   const toast = useToast()
   const isEdit = !!account
+  const isSub = !!(parentId || account?.parentId)
 
   const [name, setName] = useState(account?.name || '')
   const [icon, setIcon] = useState(account?.icon || '💳')
@@ -30,8 +33,8 @@ function AccountForm({ account, onClose }) {
         await editAccount(account.id, data)
         toast.show({ message: 'Account updated' })
       } else {
-        await addAccount(data)
-        toast.show({ message: 'Account added' })
+        await addAccount({ ...data, parentId: parentId || '' })
+        toast.show({ message: isSub ? 'Sub-account added' : 'Account added' })
       }
       onClose()
     } catch (err) {
@@ -47,19 +50,23 @@ function AccountForm({ account, onClose }) {
 
       <div className="flex gap-3">
         <Input label="Icon (emoji)" value={icon} onChange={e => setIcon(e.target.value)} className="text-xl text-center w-20" maxLength={2} />
-        <Select label="Type" value={type} onChange={e => setType(e.target.value)} className="flex-1">
-          {ACCOUNT_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-        </Select>
+        {!isSub && (
+          <Select label="Type" value={type} onChange={e => setType(e.target.value)} className="flex-1">
+            {ACCOUNT_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+          </Select>
+        )}
       </div>
 
-      <Input
-        label="Initial Balance"
-        type="number"
-        inputMode="decimal"
-        step="0.01"
-        value={initialBalance}
-        onChange={e => setInitialBalance(e.target.value)}
-      />
+      {!isSub && (
+        <Input
+          label="Initial Balance"
+          type="number"
+          inputMode="decimal"
+          step="0.01"
+          value={initialBalance}
+          onChange={e => setInitialBalance(e.target.value)}
+        />
+      )}
 
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Color</label>
@@ -80,15 +87,32 @@ function AccountForm({ account, onClose }) {
   )
 }
 
+// ── Account Manager ───────────────────────────────────────────
+
 export function AccountManager() {
-  const { accounts, removeAccount } = useApp()
+  const { topLevelAccounts, subAccountsOf, removeAccount } = useApp()
   const toast = useToast()
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
+  const [addSubParentId, setAddSubParentId] = useState(null)
+  const [expandedIds, setExpandedIds] = useState(new Set())
+
+  function toggleExpand(id) {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   async function handleDelete(acc) {
-    if (!confirm(`Delete "${acc.name}"?`)) return
+    const subs = subAccountsOf(acc.id)
+    const msg = subs.length > 0
+      ? `Delete "${acc.name}" and its ${subs.length} sub-account${subs.length === 1 ? '' : 's'}?`
+      : `Delete "${acc.name}"?`
+    if (!confirm(msg)) return
     try {
+      for (const sub of subs) await removeAccount(sub.id)
       await removeAccount(acc.id)
       toast.show({ message: 'Account deleted' })
     } catch (err) {
@@ -96,33 +120,114 @@ export function AccountManager() {
     }
   }
 
+  function openAddSub(parentId) {
+    setEditTarget(null)
+    setAddSubParentId(parentId)
+    setFormOpen(true)
+    setExpandedIds(prev => new Set([...prev, parentId]))
+  }
+
+  function openEdit(acc) {
+    setEditTarget(acc)
+    setAddSubParentId(null)
+    setFormOpen(true)
+  }
+
+  function openAddTop() {
+    setEditTarget(null)
+    setAddSubParentId(null)
+    setFormOpen(true)
+  }
+
   return (
     <div>
-      {accounts.map(acc => (
-        <div key={acc.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
-            style={{ backgroundColor: acc.color + '20' }}>
-            {acc.icon}
+      {topLevelAccounts.map(acc => {
+        const subs = subAccountsOf(acc.id)
+        const expanded = expandedIds.has(acc.id)
+
+        return (
+          <div key={acc.id}>
+            {/* Parent account row */}
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0"
+                style={{ backgroundColor: acc.color + '20' }}>
+                {acc.icon}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{acc.name}</div>
+                <div className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                  <span>{acc.type}</span>
+                  {subs.length > 0 && (
+                    <span>· {subs.length} sub-account{subs.length !== 1 ? 's' : ''}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Expand toggle */}
+              {subs.length > 0 && (
+                <button onClick={() => toggleExpand(acc.id)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition text-xs">
+                  {expanded ? '▾' : '▸'}
+                </button>
+              )}
+
+              <button onClick={() => openAddSub(acc.id)}
+                className="p-1.5 text-gray-400 hover:text-indigo-500 transition text-sm" title="Add sub-account">⊕</button>
+              <button onClick={() => openEdit(acc)}
+                className="p-1.5 text-gray-400 hover:text-indigo-600 transition">✏️</button>
+              {!acc.isDefault && (
+                <button onClick={() => handleDelete(acc)}
+                  className="p-1.5 text-gray-400 hover:text-red-500 transition">🗑</button>
+              )}
+            </div>
+
+            {/* Sub-accounts (expanded) */}
+            {expanded && subs.map(sub => (
+              <div key={sub.id} className="flex items-center gap-2 pl-10 pr-4 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20">
+                <div className="w-1 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0"
+                  style={{ backgroundColor: sub.color + '20' }}>
+                  {sub.icon}
+                </div>
+                <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">{sub.name}</span>
+                <button onClick={() => openEdit(sub)}
+                  className="p-1 text-gray-400 hover:text-indigo-600 transition text-sm">✏️</button>
+                <button onClick={() => handleDelete(sub)}
+                  className="p-1 text-gray-400 hover:text-red-500 transition text-sm">🗑</button>
+              </div>
+            ))}
+
+            {/* "Default" placeholder when expanded and has subs */}
+            {expanded && subs.length > 0 && (
+              <div className="flex items-center gap-2 pl-10 pr-4 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20">
+                <div className="w-1 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0 bg-gray-100 dark:bg-gray-800">
+                  {acc.icon}
+                </div>
+                <span className="flex-1 text-sm text-gray-400 dark:text-gray-500 italic">General (default)</span>
+              </div>
+            )}
           </div>
-          <div className="flex-1">
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{acc.name}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">{acc.type}</div>
-          </div>
-          <button className="p-1.5 text-gray-400 hover:text-indigo-600 transition" onClick={() => { setEditTarget(acc); setFormOpen(true) }}>✏️</button>
-          {!acc.isDefault && (
-            <button className="p-1.5 text-gray-400 hover:text-red-500 transition" onClick={() => handleDelete(acc)}>🗑</button>
-          )}
-        </div>
-      ))}
+        )
+      })}
 
       <div className="p-4">
-        <Button variant="secondary" className="w-full" onClick={() => { setEditTarget(null); setFormOpen(true) }}>
+        <Button variant="secondary" className="w-full" onClick={openAddTop}>
           + Add Account
         </Button>
       </div>
 
-      <Modal open={formOpen} onClose={() => setFormOpen(false)} title={editTarget ? 'Edit Account' : 'New Account'}>
-        <AccountForm account={editTarget} onClose={() => setFormOpen(false)} />
+      <Modal
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        title={editTarget ? 'Edit Account' : addSubParentId ? 'Add Sub-account' : 'New Account'}
+      >
+        <AccountForm
+          account={editTarget}
+          parentId={addSubParentId}
+          onClose={() => setFormOpen(false)}
+        />
       </Modal>
     </div>
   )

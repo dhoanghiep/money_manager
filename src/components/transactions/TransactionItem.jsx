@@ -18,6 +18,7 @@ export function TransactionItem({ transaction, showDate = false }) {
   const category = categories.find(c => c.id === transaction.categoryId)
   const subCategory = categories.find(c => c.id === transaction.subCategoryId)
   const account = accounts.find(a => a.id === transaction.accountId)
+  const subAccount = accounts.find(a => a.id === transaction.subAccountId)
   const isIncome = transaction.type === 'income'
 
   const txCurrency = transaction.currency || defaultCurrency
@@ -81,6 +82,9 @@ export function TransactionItem({ transaction, showDate = false }) {
             {account && (
               <span className="text-xs text-gray-400 dark:text-gray-500">
                 {account.icon} {account.name}
+                {subAccount && (
+                  <span className="text-gray-300 dark:text-gray-600">{' › '}{subAccount.name}</span>
+                )}
               </span>
             )}
             {transaction.note && (

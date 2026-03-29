@@ -9,7 +9,7 @@ import { toDateString, today } from '../../utils/dateHelpers.js'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
 
 export function TransactionForm({ transaction, onClose }) {
-  const { categories, accounts, addTransaction, editTransaction, topLevelCategories, subCategoriesOf } = useApp()
+  const { categories, accounts, addTransaction, editTransaction, topLevelCategories, subCategoriesOf, topLevelAccounts, subAccountsOf } = useApp()
   const { defaultCurrency, getRate, fetchSingleRate } = useCurrency()
   const toast = useToast()
   const isEdit = !!transaction?.id
@@ -20,6 +20,7 @@ export function TransactionForm({ transaction, onClose }) {
   const [categoryId, setCategoryId] = useState(transaction?.categoryId || '')
   const [subCategoryId, setSubCategoryId] = useState(transaction?.subCategoryId || '')
   const [accountId, setAccountId] = useState(transaction?.accountId || '')
+  const [subAccountId, setSubAccountId] = useState(transaction?.subAccountId || '')
   const [currency, setCurrency] = useState(transaction?.currency || defaultCurrency)
   const [exchangeRate, setExchangeRate] = useState(
     transaction?.exchangeRate ? String(transaction.exchangeRate) : ''
@@ -50,8 +51,12 @@ export function TransactionForm({ transaction, onClose }) {
   // Reset sub-category when parent category changes
   useEffect(() => { setSubCategoryId('') }, [categoryId])
 
+  // Reset sub-account when parent account changes
+  useEffect(() => { setSubAccountId('') }, [accountId])
+
   const filteredCategories = topLevelCategories.filter(c => c.type === type || c.type === 'both')
   const availableSubCategories = categoryId ? subCategoriesOf(categoryId) : []
+  const availableSubAccounts = accountId ? subAccountsOf(accountId) : []
 
   const isForeign = currency !== defaultCurrency
   const rate = parseFloat(exchangeRate) || 0
@@ -97,6 +102,7 @@ export function TransactionForm({ transaction, onClose }) {
         categoryId: categoryId || null,
         subCategoryId: subCategoryId || null,
         accountId: accountId || null,
+        subAccountId: subAccountId || null,
         note: note.trim(),
         currency: currency || defaultCurrency,
         exchangeRate: isForeign ? Number(exchangeRate) : 1,
@@ -246,10 +252,24 @@ export function TransactionForm({ transaction, onClose }) {
         onChange={e => setAccountId(e.target.value)}
       >
         <option value="">— No account —</option>
-        {accounts.map(a => (
+        {topLevelAccounts.map(a => (
           <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
         ))}
       </Select>
+
+      {/* Sub-account */}
+      {accountId && availableSubAccounts.length > 0 && (
+        <Select
+          label="Sub-account"
+          value={subAccountId}
+          onChange={e => setSubAccountId(e.target.value)}
+        >
+          <option value="">General</option>
+          {availableSubAccounts.map(a => (
+            <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
+          ))}
+        </Select>
+      )}
 
       {/* Note */}
       <Textarea

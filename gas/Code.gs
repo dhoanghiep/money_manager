@@ -151,6 +151,7 @@ function addTransaction(data) {
     data.subCategoryId || '',
     data.currency || '',
     data.exchangeRate || 1,
+    data.subAccountId || '',
   ]);
   return { ok: true, id: id };
 }
@@ -179,6 +180,9 @@ function updateTransaction(id, data) {
       }
       if (data.exchangeRate !== undefined && headers.indexOf('exchangeRate') !== -1) {
         sheet.getRange(rowNum, headers.indexOf('exchangeRate') + 1).setValue(Number(data.exchangeRate) || 1);
+      }
+      if (data.subAccountId !== undefined && headers.indexOf('subAccountId') !== -1) {
+        sheet.getRange(rowNum, headers.indexOf('subAccountId') + 1).setValue(data.subAccountId || '');
       }
       sheet.getRange(rowNum, headers.indexOf('updatedAt') + 1).setValue(now);
       return { ok: true };
@@ -285,7 +289,7 @@ function getAccounts() {
 function addAccount(data) {
   const sheet = getSheet(SHEET_NAMES.ACCOUNTS);
   const id = generateId('acc');
-  sheet.appendRow([id, data.name, data.color || '#6B7280', data.icon || '💳', data.type || 'bank', data.initialBalance || 0, false]);
+  sheet.appendRow([id, data.name, data.color || '#6B7280', data.icon || '💳', data.type || 'bank', data.initialBalance || 0, false, data.parentId || '']);
   return { ok: true, id: id };
 }
 
@@ -303,6 +307,9 @@ function updateAccount(id, data) {
       if (data.icon !== undefined) sheet.getRange(rowNum, headers.indexOf('icon') + 1).setValue(data.icon);
       if (data.type !== undefined) sheet.getRange(rowNum, headers.indexOf('type') + 1).setValue(data.type);
       if (data.initialBalance !== undefined) sheet.getRange(rowNum, headers.indexOf('initialBalance') + 1).setValue(data.initialBalance);
+      if (data.parentId !== undefined && headers.indexOf('parentId') !== -1) {
+        sheet.getRange(rowNum, headers.indexOf('parentId') + 1).setValue(data.parentId || '');
+      }
       return { ok: true };
     }
   }
@@ -442,6 +449,32 @@ function addSubCategoryColumns() {
   }
 
   Logger.log('Migration complete!');
+}
+
+// ── Sub-account Column Migration ──────────────────────────────
+// Run once after updating Code.gs to add parentId to Accounts
+// and subAccountId to Transactions.
+
+function addSubAccountColumns() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Add parentId to Accounts
+  var accSheet = ss.getSheetByName('Accounts');
+  var accHeaders = accSheet.getRange(1, 1, 1, accSheet.getLastColumn()).getValues()[0];
+  if (accHeaders.indexOf('parentId') === -1) {
+    accSheet.getRange(1, accSheet.getLastColumn() + 1).setValue('parentId');
+    Logger.log('Added parentId column to Accounts');
+  }
+
+  // Add subAccountId to Transactions
+  var txSheet = ss.getSheetByName('Transactions');
+  var txHeaders = txSheet.getRange(1, 1, 1, txSheet.getLastColumn()).getValues()[0];
+  if (txHeaders.indexOf('subAccountId') === -1) {
+    txSheet.getRange(1, txSheet.getLastColumn() + 1).setValue('subAccountId');
+    Logger.log('Added subAccountId column to Transactions');
+  }
+
+  Logger.log('Sub-account migration complete!');
 }
 
 // Run once after updating Code.gs to add currency + exchangeRate columns to existing Transactions sheet.

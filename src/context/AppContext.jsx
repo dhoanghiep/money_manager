@@ -234,14 +234,20 @@ export function AppProvider({ children }) {
     dispatch({ type: 'REMOVE_ACCOUNT', payload: id })
   }
 
-  // Derived: top-level categories (no parentId) and sub-categories map
+  // Derived: top-level categories / sub-categories
   const topLevelCategories = state.categories.filter(c => !c.parentId)
   const subCategoriesOf = (parentId) => state.categories.filter(c => c.parentId === parentId)
+
+  // Derived: top-level accounts / sub-accounts
+  const topLevelAccounts = state.accounts.filter(a => !a.parentId)
+  const subAccountsOf = (parentId) => state.accounts.filter(a => a.parentId === parentId)
 
   const value = {
     ...state,
     topLevelCategories,
     subCategoriesOf,
+    topLevelAccounts,
+    subAccountsOf,
     loadTransactions,
     loadCategories,
     loadAccounts,
