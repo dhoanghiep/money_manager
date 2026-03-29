@@ -48,13 +48,36 @@ export function groupByCategory(transactions, categories) {
   }).sort((a, b) => b.total - a.total)
 }
 
+export function groupBySubCategory(transactions, categories) {
+  const map = {}
+  transactions.forEach(t => {
+    const subKey = t.subCategoryId || `__general__${t.categoryId || 'uncategorized'}`
+    if (!map[subKey]) map[subKey] = { subCategoryId: t.subCategoryId || '', categoryId: t.categoryId || '', total: 0 }
+    map[subKey].total += Number(t.amount)
+  })
+
+  return Object.values(map).map(item => {
+    const parent = categories.find(c => c.id === item.categoryId)
+    const sub = categories.find(c => c.id === item.subCategoryId)
+    const subName = sub ? sub.name : 'General'
+    const parentName = parent ? parent.name : 'Uncategorized'
+    return {
+      ...item,
+      name: `${parentName} › ${subName}`,
+      color: sub ? sub.color : (parent ? parent.color : '#6B7280'),
+      icon: sub ? sub.icon : (parent ? parent.icon : '📦'),
+    }
+  }).sort((a, b) => b.total - a.total)
+}
+
 export function groupByAccount(transactions, accounts) {
   const map = {}
   transactions.forEach(t => {
     const key = t.accountId || 'unknown'
-    if (!map[key]) map[key] = { accountId: key, income: 0, expense: 0 }
-    if (t.type === 'income') map[key].income += Number(t.amount)
-    else map[key].expense += Number(t.amount)
+    if (!map[key]) map[key] = { accountId: key, income: 0, expense: 0, total: 0 }
+    const amt = Number(t.amount)
+    if (t.type === 'income') { map[key].income += amt; map[key].total += amt }
+    else { map[key].expense += amt; map[key].total += amt }
   })
 
   return Object.values(map).map(item => {
@@ -63,8 +86,9 @@ export function groupByAccount(transactions, accounts) {
       ...item,
       name: acc ? acc.name : 'Unknown',
       color: acc ? acc.color : '#6B7280',
+      icon: acc ? acc.icon : '💳',
     }
-  })
+  }).sort((a, b) => b.total - a.total)
 }
 
 export function groupByDate(transactions) {

@@ -1,89 +1,86 @@
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { groupByCategory, getDailyTotals } from '../../utils/aggregations.js'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
 
-// ── Category Pie Chart ─────────────────────────────────────────
+// ── Custom external pie label ──────────────────────────────────
+const RADIAN = Math.PI / 180
 
-export function CategoryPieChart({ transactions, categories }) {
-  const expenseTransactions = transactions.filter(t => t.type === 'expense')
-  const data = groupByCategory(expenseTransactions, categories).filter(d => d.total > 0)
+function PieLabel({ cx, cy, midAngle, outerRadius, name, percent, fill }) {
+  if (percent < 0.03) return null // hide tiny slices
+  const radius = outerRadius + 28
+  const x = cx + radius * Math.cos(-midAngle * RADIAN)
+  const y = cy + radius * Math.sin(-midAngle * RADIAN)
+  const anchor = x > cx ? 'start' : 'end'
 
-  if (data.length === 0) {
+  // Label line end point
+  const lineR = outerRadius + 6
+  const lx = cx + lineR * Math.cos(-midAngle * RADIAN)
+  const ly = cy + lineR * Math.sin(-midAngle * RADIAN)
+  const lx2 = cx + (outerRadius + 20) * Math.cos(-midAngle * RADIAN)
+  const ly2 = cy + (outerRadius + 20) * Math.sin(-midAngle * RADIAN)
+
+  return (
+    <g>
+      <line x1={lx} y1={ly} x2={lx2} y2={ly2} stroke={fill} strokeWidth={1} />
+      <text x={x} y={y - 6} textAnchor={anchor} fill={fill} fontSize={10} fontWeight={600}>
+        {name.length > 12 ? name.slice(0, 11) + '…' : name}
+      </text>
+      <text x={x} y={y + 6} textAnchor={anchor} fill={fill} fontSize={10} opacity={0.8}>
+        {(percent * 100).toFixed(1)}%
+      </text>
+    </g>
+  )
+}
+
+// ── Stat Pie Chart ─────────────────────────────────────────────
+
+export function StatPieChart({ data }) {
+  if (!data || data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-40 text-sm text-gray-400">
-        No expenses to display
+      <div className="flex flex-col items-center justify-center h-52 text-gray-400 dark:text-gray-500 gap-2">
+        <span className="text-3xl">📊</span>
+        <span className="text-sm">No data for this period</span>
       </div>
     )
   }
 
-  return (
-    <div>
-      <ResponsiveContainer width="100%" height={220}>
-        <PieChart>
-          <Pie
-            data={data}
-            dataKey="total"
-            nameKey="name"
-            cx="50%"
-            cy="50%"
-            innerRadius={55}
-            outerRadius={85}
-            paddingAngle={2}
-          >
-            {data.map((entry, i) => (
-              <Cell key={i} fill={entry.color} />
-            ))}
-          </Pie>
-          <Tooltip
-            formatter={(v) => formatCurrency(v)}
-            contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-          />
-        </PieChart>
-      </ResponsiveContainer>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-2 justify-center">
-        {data.slice(0, 6).map((d, i) => (
-          <div key={i} className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
-            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
-            <span>{d.icon} {d.name}</span>
-            <span className="font-medium text-gray-900 dark:text-gray-100">{formatCurrency(d.total)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Income / Expense Bar Chart ──────────────────────────────────
-
-export function TrendBarChart({ transactions, startDate, endDate }) {
-  const data = getDailyTotals(transactions, startDate, endDate)
-
-  if (data.length === 0) {
-    return <div className="flex items-center justify-center h-40 text-sm text-gray-400">No data</div>
-  }
-
-  // For longer ranges, reduce density
-  const step = data.length > 14 ? Math.ceil(data.length / 14) : 1
-  const reduced = data.filter((_, i) => i % step === 0 || i === data.length - 1)
+  const total = data.reduce((s, d) => s + d.total, 0)
 
   return (
-    <ResponsiveContainer width="100%" height={180}>
-      <BarChart data={reduced} margin={{ top: 0, right: 0, left: -20, bottom: 0 }} barSize={8} barGap={2}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" strokeOpacity={0.5} />
-        <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+    <ResponsiveContainer width="100%" height={240}>
+      <PieChart>
+        <Pie
+          data={data}
+          dataKey="total"
+          nameKey="name"
+          cx="50%"
+          cy="50%"
+          innerRadius={48}
+          outerRadius={80}
+          paddingAngle={1.5}
+          labelLine={false}
+          label={<PieLabel />}
+        >
+          {data.map((entry, i) => (
+            <Cell key={i} fill={entry.color} />
+          ))}
+        </Pie>
         <Tooltip
-          formatter={(v, name) => [formatCurrency(v), name === 'income' ? 'Income' : 'Expense']}
-          contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+          formatter={(v) => [formatCurrency(v), '']}
+          contentStyle={{
+            fontSize: 12, borderRadius: 10, border: 'none',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          }}
         />
-        <Bar dataKey="income" fill="#22C55E" radius={[3,3,0,0]} />
-        <Bar dataKey="expense" fill="#EF4444" radius={[3,3,0,0]} />
-      </BarChart>
+      </PieChart>
     </ResponsiveContainer>
   )
 }
+
+// ── Trend Bar Chart (stub — not used in new dashboard) ─────────
+export function TrendBarChart() { return null }
+
+// Export old name for backward compat (not used in new dashboard)
+export function CategoryPieChart() { return null }
