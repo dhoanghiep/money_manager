@@ -198,6 +198,8 @@ export function AppProvider({ children }) {
     const res = await api.addSchedule(data)
     const newSch = { ...data, id: res.id, isActive: true, nextDate: data.startDate, createdAt: new Date().toISOString() }
     dispatch({ type: 'ADD_SCHEDULE', payload: newSch })
+    // Apply immediately in case the start date is today or in the past
+    applyDueSchedulesOnLoad()
     return newSch
   }
 

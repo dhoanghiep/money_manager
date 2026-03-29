@@ -111,7 +111,7 @@ export const api = {
   },
 
   applyDueSchedules() {
-    return request('GET', { action: 'applyDueSchedules' })
+    return request('POST', {}, { action: 'applyDueSchedules' })
   },
 
   ping() {

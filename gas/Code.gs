@@ -38,9 +38,6 @@ function doGet(e) {
       case 'getSchedules':
         result = getSchedules();
         break;
-      case 'applyDueSchedules':
-        result = applyDueSchedules();
-        break;
       case 'ping':
         result = { ok: true, timestamp: new Date().toISOString() };
         break;
@@ -103,6 +100,9 @@ function doPost(e) {
         break;
       case 'deleteSchedule':
         result = deleteSchedule(id);
+        break;
+      case 'applyDueSchedules':
+        result = applyDueSchedules();
         break;
       default:
         result = { error: 'Unknown action: ' + action };
