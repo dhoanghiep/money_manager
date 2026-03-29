@@ -149,6 +149,8 @@ function addTransaction(data) {
     now,
     now,
     data.subCategoryId || '',
+    data.currency || '',
+    data.exchangeRate || 1,
   ]);
   return { ok: true, id: id };
 }
@@ -171,6 +173,12 @@ function updateTransaction(id, data) {
       if (data.note !== undefined) sheet.getRange(rowNum, headers.indexOf('note') + 1).setValue(data.note);
       if (data.subCategoryId !== undefined && headers.indexOf('subCategoryId') !== -1) {
         sheet.getRange(rowNum, headers.indexOf('subCategoryId') + 1).setValue(data.subCategoryId || '');
+      }
+      if (data.currency !== undefined && headers.indexOf('currency') !== -1) {
+        sheet.getRange(rowNum, headers.indexOf('currency') + 1).setValue(data.currency || '');
+      }
+      if (data.exchangeRate !== undefined && headers.indexOf('exchangeRate') !== -1) {
+        sheet.getRange(rowNum, headers.indexOf('exchangeRate') + 1).setValue(Number(data.exchangeRate) || 1);
       }
       sheet.getRange(rowNum, headers.indexOf('updatedAt') + 1).setValue(now);
       return { ok: true };
@@ -429,6 +437,29 @@ function addSubCategoryColumns() {
   Logger.log('Migration complete!');
 }
 
+// Run once after updating Code.gs to add currency + exchangeRate columns to existing Transactions sheet.
+function addCurrencyColumns() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var txSheet = ss.getSheetByName('Transactions');
+  if (!txSheet) { Logger.log('Transactions sheet not found'); return; }
+  var headers = txSheet.getRange(1, 1, 1, txSheet.getLastColumn()).getValues()[0];
+  if (headers.indexOf('currency') === -1) {
+    txSheet.getRange(1, txSheet.getLastColumn() + 1).setValue('currency');
+    Logger.log('Added currency column to Transactions');
+  }
+  if (headers.indexOf('exchangeRate') === -1) {
+    txSheet.getRange(1, txSheet.getLastColumn() + 1).setValue('exchangeRate');
+    // Default existing rows to exchangeRate = 1
+    var lastRow = txSheet.getLastRow();
+    if (lastRow > 1) {
+      var col = txSheet.getLastColumn();
+      txSheet.getRange(2, col, lastRow - 1, 1).setValue(1);
+    }
+    Logger.log('Added exchangeRate column to Transactions');
+  }
+  Logger.log('Done');
+}
+
 // ── Schedules ─────────────────────────────────────────────────
 // Columns: id | name | amount | type | categoryId | accountId | note | frequency | startDate | nextDate | endDate | isActive | createdAt
 
@@ -600,7 +631,7 @@ function setupSheets() {
     return sheet;
   }
 
-  ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt', 'subCategoryId']);
+  ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt', 'subCategoryId', 'currency', 'exchangeRate']);
   ensureSheet(SHEET_NAMES.CATEGORIES,   ['id', 'name', 'color', 'icon', 'type', 'isDefault', 'parentId']);
   ensureSheet(SHEET_NAMES.ACCOUNTS,     ['id', 'name', 'color', 'icon', 'type', 'initialBalance', 'isDefault']);
   ensureSheet(SHEET_NAMES.SCHEDULES,    ['id', 'name', 'amount', 'type', 'categoryId', 'accountId', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'isActive', 'createdAt']);

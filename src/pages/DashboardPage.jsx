@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext.jsx'
+import { useCurrency } from '../context/CurrencyContext.jsx'
 import { Header } from '../components/layout/Header.jsx'
 import { PeriodSelector } from '../components/summary/StatCard.jsx'
 import { StatPieChart } from '../components/summary/Charts.jsx'
@@ -24,18 +25,18 @@ const GROUP_MODES = [
 
 // ── Stat row ──────────────────────────────────────────────────
 
-function StatRow({ label, amount, colorClass }) {
+function StatRow({ label, amount, colorClass, currency }) {
   return (
     <div className="flex items-center justify-between">
       <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">{label}</span>
-      <span className={`text-sm font-bold ${colorClass}`}>{formatCurrency(amount)}</span>
+      <span className={`text-sm font-bold ${colorClass}`}>{formatCurrency(amount, currency)}</span>
     </div>
   )
 }
 
 // ── Category list item ────────────────────────────────────────
 
-function GroupItem({ item, total }) {
+function GroupItem({ item, total, currency }) {
   const pct = total > 0 ? (item.total / total) * 100 : 0
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
@@ -52,7 +53,7 @@ function GroupItem({ item, total }) {
         <div className="flex items-center justify-between gap-2 mb-1">
           <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{item.name}</span>
           <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 flex-shrink-0">
-            {formatCurrency(item.total)}
+            {formatCurrency(item.total, currency)}
           </span>
         </div>
         <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
@@ -78,6 +79,7 @@ function GroupItem({ item, total }) {
 
 export function DashboardPage() {
   const { transactions, categories, accounts, loading } = useApp()
+  const { defaultCurrency } = useCurrency()
   const [period, setPeriod] = useState('month')
   const [refDate, setRefDate] = useState(today())
   const [addOpen, setAddOpen] = useState(false)
@@ -165,7 +167,7 @@ export function DashboardPage() {
                 ].map(({ label, value, cls }) => (
                   <div key={label} className="flex flex-col items-center py-3 px-2">
                     <span className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">{label}</span>
-                    <span className={`text-sm font-bold leading-tight ${cls}`}>{formatCurrency(value)}</span>
+                    <span className={`text-sm font-bold leading-tight ${cls}`}>{formatCurrency(value, defaultCurrency)}</span>
                   </div>
                 ))}
               </div>
@@ -221,7 +223,7 @@ export function DashboardPage() {
                 </div>
               ) : (
                 groupData.map((item, i) => (
-                  <GroupItem key={i} item={item} total={groupTotal} />
+                  <GroupItem key={i} item={item} total={groupTotal} currency={defaultCurrency} />
                 ))
               )}
             </div>

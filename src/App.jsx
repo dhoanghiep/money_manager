@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { ThemeProvider } from './context/ThemeContext.jsx'
+import { CurrencyProvider } from './context/CurrencyContext.jsx'
 import { AppProvider } from './context/AppContext.jsx'
 import { ToastProvider } from './components/ui/Toast.jsx'
 import { BottomNav } from './components/layout/BottomNav.jsx'
@@ -38,9 +39,11 @@ function AppShell() {
 export default function App() {
   return (
     <ThemeProvider>
-      <ToastProvider>
-        <AppShell />
-      </ToastProvider>
+      <CurrencyProvider>
+        <ToastProvider>
+          <AppShell />
+        </ToastProvider>
+      </CurrencyProvider>
     </ThemeProvider>
   )
 }

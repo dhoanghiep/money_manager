@@ -13,16 +13,21 @@ export function filterByDateRange(transactions, startDate, endDate) {
   })
 }
 
+// Helper: get amount in default currency
+function baseAmount(t) {
+  return Number(t.amount) * (Number(t.exchangeRate) || 1)
+}
+
 export function sumIncome(transactions) {
   return transactions
     .filter(t => t.type === 'income')
-    .reduce((acc, t) => acc + Number(t.amount), 0)
+    .reduce((acc, t) => acc + baseAmount(t), 0)
 }
 
 export function sumExpense(transactions) {
   return transactions
     .filter(t => t.type === 'expense')
-    .reduce((acc, t) => acc + Number(t.amount), 0)
+    .reduce((acc, t) => acc + baseAmount(t), 0)
 }
 
 export function netBalance(transactions) {
@@ -34,7 +39,7 @@ export function groupByCategory(transactions, categories) {
   transactions.forEach(t => {
     const key = t.categoryId || 'uncategorized'
     if (!map[key]) map[key] = { categoryId: key, total: 0 }
-    map[key].total += Number(t.amount)
+    map[key].total += baseAmount(t)
   })
 
   return Object.values(map).map(item => {
@@ -53,7 +58,7 @@ export function groupBySubCategory(transactions, categories) {
   transactions.forEach(t => {
     const subKey = t.subCategoryId || `__general__${t.categoryId || 'uncategorized'}`
     if (!map[subKey]) map[subKey] = { subCategoryId: t.subCategoryId || '', categoryId: t.categoryId || '', total: 0 }
-    map[subKey].total += Number(t.amount)
+    map[subKey].total += baseAmount(t)
   })
 
   return Object.values(map).map(item => {
@@ -75,7 +80,7 @@ export function groupByAccount(transactions, accounts) {
   transactions.forEach(t => {
     const key = t.accountId || 'unknown'
     if (!map[key]) map[key] = { accountId: key, income: 0, expense: 0, total: 0 }
-    const amt = Number(t.amount)
+    const amt = baseAmount(t)
     if (t.type === 'income') { map[key].income += amt; map[key].total += amt }
     else { map[key].expense += amt; map[key].total += amt }
   })

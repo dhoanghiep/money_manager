@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
+import { useCurrency } from '../../context/CurrencyContext.jsx'
 import { useToast } from '../ui/Toast.jsx'
 import { Modal } from '../ui/Modal.jsx'
 import { TransactionForm } from './TransactionForm.jsx'
@@ -8,6 +9,7 @@ import { formatDisplay } from '../../utils/dateHelpers.js'
 
 export function TransactionItem({ transaction, showDate = false }) {
   const { categories, accounts, removeTransaction } = useApp()
+  const { defaultCurrency } = useCurrency()
   const toast = useToast()
   const [editOpen, setEditOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -17,6 +19,11 @@ export function TransactionItem({ transaction, showDate = false }) {
   const subCategory = categories.find(c => c.id === transaction.subCategoryId)
   const account = accounts.find(a => a.id === transaction.accountId)
   const isIncome = transaction.type === 'income'
+
+  const txCurrency = transaction.currency || defaultCurrency
+  const isForeign = txCurrency !== defaultCurrency
+  const exchangeRate = Number(transaction.exchangeRate) || 1
+  const convertedAmount = Number(transaction.amount) * exchangeRate
 
   async function handleDelete() {
     setDeleting(true)
@@ -56,9 +63,19 @@ export function TransactionItem({ transaction, showDate = false }) {
                 </span>
               )}
             </span>
-            <span className={`font-semibold text-sm flex-shrink-0 ${isIncome ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-              {isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
-            </span>
+            <div className="flex flex-col items-end flex-shrink-0">
+              <span className={`font-semibold text-sm ${isIncome ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                {isIncome ? '+' : '-'}{isForeign
+                  ? formatCurrency(transaction.amount, txCurrency)
+                  : formatCurrency(transaction.amount, defaultCurrency)
+                }
+              </span>
+              {isForeign && (
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                  ≈ {formatCurrency(convertedAmount, defaultCurrency)}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2 mt-0.5">
             {account && (

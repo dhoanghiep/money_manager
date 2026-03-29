@@ -2,9 +2,12 @@ import { useState } from 'react'
 import { Header } from '../components/layout/Header.jsx'
 import { CategoryManager } from '../components/categories/CategoryManager.jsx'
 import { AccountManager } from '../components/accounts/AccountManager.jsx'
+import { CurrencyManager } from '../components/settings/CurrencyManager.jsx'
+
 const TABS = [
   { id: 'categories', label: '🏷 Categories' },
   { id: 'accounts',   label: '🏦 Accounts'   },
+  { id: 'currency',   label: '💱 Currency'   },
 ]
 
 export function SettingsPage() {
@@ -34,6 +37,7 @@ export function SettingsPage() {
       <div className="flex-1 overflow-y-auto pb-20">
         {tab === 'categories' && <CategoryManager />}
         {tab === 'accounts'   && <AccountManager />}
+        {tab === 'currency'   && <CurrencyManager />}
       </div>
     </div>
   )

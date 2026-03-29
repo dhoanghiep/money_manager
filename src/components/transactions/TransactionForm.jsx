@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
+import { useCurrency } from '../../context/CurrencyContext.jsx'
+import { SUPPORTED_CURRENCIES } from '../../utils/exchangeRates.js'
 import { useToast } from '../ui/Toast.jsx'
 import { Button } from '../ui/Button.jsx'
 import { Input, Select, Textarea } from '../ui/Input.jsx'
 import { toDateString, today } from '../../utils/dateHelpers.js'
+import { formatCurrency } from '../../utils/currencyFormatter.js'
 
 export function TransactionForm({ transaction, onClose }) {
   const { categories, accounts, addTransaction, editTransaction, topLevelCategories, subCategoriesOf } = useApp()
+  const { defaultCurrency, getRate, fetchSingleRate } = useCurrency()
   const toast = useToast()
   const isEdit = !!transaction?.id
 
@@ -16,8 +20,16 @@ export function TransactionForm({ transaction, onClose }) {
   const [categoryId, setCategoryId] = useState(transaction?.categoryId || '')
   const [subCategoryId, setSubCategoryId] = useState(transaction?.subCategoryId || '')
   const [accountId, setAccountId] = useState(transaction?.accountId || '')
+  const [currency, setCurrency] = useState(transaction?.currency || defaultCurrency)
+  const [exchangeRate, setExchangeRate] = useState(
+    transaction?.exchangeRate ? String(transaction.exchangeRate) : ''
+  )
+  const [fetchingRate, setFetchingRate] = useState(false)
+  const [note, setNote] = useState(transaction?.note || '')
+  const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState({})
 
-  // Default to bank account when accounts load (only for new transactions)
+  // Default to bank account for new transactions
   useEffect(() => {
     if (!isEdit && !transaction?.accountId && accounts.length > 0 && !accountId) {
       const bank = accounts.find(a => a.type === 'bank') ?? accounts[0]
@@ -25,19 +37,49 @@ export function TransactionForm({ transaction, onClose }) {
     }
   }, [accounts])
 
+  // When currency changes, pre-fill rate from cached rates
+  useEffect(() => {
+    if (currency === defaultCurrency) {
+      setExchangeRate('')
+    } else {
+      const cached = getRate(currency)
+      if (cached && cached !== 1) setExchangeRate(String(cached))
+    }
+  }, [currency, defaultCurrency])
+
   // Reset sub-category when parent category changes
   useEffect(() => { setSubCategoryId('') }, [categoryId])
-  const [note, setNote] = useState(transaction?.note || '')
-  const [loading, setLoading] = useState(false)
-  const [errors, setErrors] = useState({})
 
   const filteredCategories = topLevelCategories.filter(c => c.type === type || c.type === 'both')
   const availableSubCategories = categoryId ? subCategoriesOf(categoryId) : []
+
+  const isForeign = currency !== defaultCurrency
+  const rate = parseFloat(exchangeRate) || 0
+  const convertedAmount = isForeign && rate > 0 && amount ? parseFloat(amount) * rate : null
+
+  async function handleFetchRate() {
+    if (!isForeign) return
+    setFetchingRate(true)
+    try {
+      const r = await fetchSingleRate(currency)
+      if (r) {
+        setExchangeRate(String(r))
+        toast.show({ message: `Live rate: 1 ${currency} = ${r.toFixed(6)} ${defaultCurrency}` })
+      }
+    } catch (e) {
+      toast.show({ message: `Could not fetch rate: ${e.message}`, type: 'error' })
+    } finally {
+      setFetchingRate(false)
+    }
+  }
 
   function validate() {
     const errs = {}
     if (!amount || isNaN(amount) || Number(amount) <= 0) errs.amount = 'Enter a valid amount'
     if (!date) errs.date = 'Date is required'
+    if (isForeign && (!exchangeRate || isNaN(exchangeRate) || Number(exchangeRate) <= 0)) {
+      errs.exchangeRate = 'Enter the exchange rate'
+    }
     return errs
   }
 
@@ -56,6 +98,8 @@ export function TransactionForm({ transaction, onClose }) {
         subCategoryId: subCategoryId || null,
         accountId: accountId || null,
         note: note.trim(),
+        currency: currency || defaultCurrency,
+        exchangeRate: isForeign ? Number(exchangeRate) : 1,
       }
       if (isEdit) {
         await editTransaction(transaction.id, data)
@@ -92,19 +136,73 @@ export function TransactionForm({ transaction, onClose }) {
         ))}
       </div>
 
-      {/* Amount */}
-      <Input
-        label="Amount"
-        type="number"
-        inputMode="decimal"
-        step="0.01"
-        min="0"
-        placeholder="0.00"
-        value={amount}
-        onChange={e => setAmount(e.target.value)}
-        error={errors.amount}
-        className="text-2xl font-bold"
-      />
+      {/* Amount + Currency row */}
+      <div className="flex gap-2 items-end">
+        <div className="flex-1">
+          <Input
+            label="Amount"
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            error={errors.amount}
+            className="text-2xl font-bold"
+          />
+        </div>
+        <div className="pb-0.5">
+          <Select
+            label="Currency"
+            value={currency}
+            onChange={e => setCurrency(e.target.value)}
+          >
+            {SUPPORTED_CURRENCIES.map(c => (
+              <option key={c.code} value={c.code}>{c.symbol} {c.code}</option>
+            ))}
+          </Select>
+        </div>
+      </div>
+
+      {/* Exchange rate (only when foreign currency) */}
+      {isForeign && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-amber-800 dark:text-amber-400">
+              Exchange rate: 1 {currency} = ? {defaultCurrency}
+            </span>
+            <button
+              type="button"
+              onClick={handleFetchRate}
+              disabled={fetchingRate}
+              className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline disabled:opacity-50"
+            >
+              {fetchingRate ? 'Fetching…' : '↻ Suggest live rate'}
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              step="any"
+              min="0"
+              placeholder="e.g. 1.55"
+              value={exchangeRate}
+              onChange={e => setExchangeRate(e.target.value)}
+              className={`flex-1 px-3 py-2 text-sm rounded-lg border bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                errors.exchangeRate ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+              }`}
+            />
+            <span className="text-sm text-gray-500 dark:text-gray-400">{defaultCurrency}</span>
+          </div>
+          {errors.exchangeRate && <p className="text-xs text-red-500">{errors.exchangeRate}</p>}
+          {convertedAmount !== null && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              ≈ {formatCurrency(convertedAmount, defaultCurrency)} {defaultCurrency}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Date */}
       <Input
@@ -127,7 +225,7 @@ export function TransactionForm({ transaction, onClose }) {
         ))}
       </Select>
 
-      {/* Sub-category — shown only when a parent category is selected */}
+      {/* Sub-category */}
       {categoryId && (
         <Select
           label="Sub-category"
