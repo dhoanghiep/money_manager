@@ -1,0 +1,111 @@
+import { parseISO, format, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns'
+import { parseDate } from './dateHelpers.js'
+
+export function filterByDateRange(transactions, startDate, endDate) {
+  const start = parseDate(startDate)
+  const end = parseDate(endDate)
+  return transactions.filter(t => {
+    const d = parseDate(t.date)
+    if (!d) return false
+    if (start && d < start) return false
+    if (end && d > new Date(endDate + 'T23:59:59')) return false
+    return true
+  })
+}
+
+export function sumIncome(transactions) {
+  return transactions
+    .filter(t => t.type === 'income')
+    .reduce((acc, t) => acc + Number(t.amount), 0)
+}
+
+export function sumExpense(transactions) {
+  return transactions
+    .filter(t => t.type === 'expense')
+    .reduce((acc, t) => acc + Number(t.amount), 0)
+}
+
+export function netBalance(transactions) {
+  return sumIncome(transactions) - sumExpense(transactions)
+}
+
+export function groupByCategory(transactions, categories) {
+  const map = {}
+  transactions.forEach(t => {
+    const key = t.categoryId || 'uncategorized'
+    if (!map[key]) map[key] = { categoryId: key, total: 0 }
+    map[key].total += Number(t.amount)
+  })
+
+  return Object.values(map).map(item => {
+    const cat = categories.find(c => c.id === item.categoryId)
+    return {
+      ...item,
+      name: cat ? cat.name : 'Uncategorized',
+      color: cat ? cat.color : '#6B7280',
+      icon: cat ? cat.icon : '📦',
+    }
+  }).sort((a, b) => b.total - a.total)
+}
+
+export function groupByAccount(transactions, accounts) {
+  const map = {}
+  transactions.forEach(t => {
+    const key = t.accountId || 'unknown'
+    if (!map[key]) map[key] = { accountId: key, income: 0, expense: 0 }
+    if (t.type === 'income') map[key].income += Number(t.amount)
+    else map[key].expense += Number(t.amount)
+  })
+
+  return Object.values(map).map(item => {
+    const acc = accounts.find(a => a.id === item.accountId)
+    return {
+      ...item,
+      name: acc ? acc.name : 'Unknown',
+      color: acc ? acc.color : '#6B7280',
+    }
+  })
+}
+
+export function groupByDate(transactions) {
+  const map = {}
+  transactions.forEach(t => {
+    const key = t.date
+    if (!map[key]) map[key] = []
+    map[key].push(t)
+  })
+  // Return sorted descending
+  return Object.entries(map)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([date, items]) => ({ date, items }))
+}
+
+export function getDailyTotals(transactions, startDate, endDate) {
+  const start = parseDate(startDate)
+  const end = parseDate(endDate)
+  if (!start || !end) return []
+
+  const days = eachDayOfInterval({ start, end })
+  return days.map(day => {
+    const key = format(day, 'yyyy-MM-dd')
+    const dayTxns = transactions.filter(t => t.date === key)
+    return {
+      date: key,
+      label: format(day, 'MMM d'),
+      income: sumIncome(dayTxns),
+      expense: sumExpense(dayTxns),
+    }
+  })
+}
+
+export function getTransactionsForDay(transactions, dateStr) {
+  return transactions.filter(t => t.date === dateStr)
+}
+
+export function getTransactionsForDateRange(transactions, startDate, endDate) {
+  return filterByDateRange(transactions, startDate, endDate)
+}
+
+export function hasTransactionsOnDay(transactions, dateStr) {
+  return transactions.some(t => t.date === dateStr)
+}
