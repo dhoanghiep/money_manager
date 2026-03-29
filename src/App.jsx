@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage.jsx'
 import { CalendarPage } from './pages/CalendarPage.jsx'
 import { TransactionsPage } from './pages/TransactionsPage.jsx'
 import { SettingsPage } from './pages/SettingsPage.jsx'
+import { SchedulesPage } from './pages/SchedulesPage.jsx'
 import { PasswordGate, usePasswordGate } from './components/PasswordGate.jsx'
 
 function AppShell() {
@@ -24,6 +25,7 @@ function AppShell() {
             <Route path="/"             element={<CalendarPage />} />
             <Route path="/dashboard"    element={<DashboardPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
+            <Route path="/schedules"    element={<SchedulesPage />} />
             <Route path="/settings"     element={<SettingsPage />} />
           </Routes>
           <BottomNav />

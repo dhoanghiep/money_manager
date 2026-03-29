@@ -2,16 +2,13 @@ import { useState } from 'react'
 import { Header } from '../components/layout/Header.jsx'
 import { CategoryManager } from '../components/categories/CategoryManager.jsx'
 import { AccountManager } from '../components/accounts/AccountManager.jsx'
-import { ScheduleManager } from '../components/schedules/ScheduleManager.jsx'
-
 const TABS = [
-  { id: 'schedules',  label: '🔁 Schedules' },
   { id: 'categories', label: '🏷 Categories' },
   { id: 'accounts',   label: '🏦 Accounts'   },
 ]
 
 export function SettingsPage() {
-  const [tab, setTab] = useState('schedules')
+  const [tab, setTab] = useState('categories')
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -35,7 +32,6 @@ export function SettingsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto pb-20">
-        {tab === 'schedules'  && <ScheduleManager />}
         {tab === 'categories' && <CategoryManager />}
         {tab === 'accounts'   && <AccountManager />}
       </div>
