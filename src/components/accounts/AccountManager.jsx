@@ -1,5 +1,9 @@
 import { useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
+
+const DEFAULT_ACCOUNT_KEY = 'mm_default_account_id'
+export function getDefaultAccountId() { return localStorage.getItem(DEFAULT_ACCOUNT_KEY) || '' }
+export function setDefaultAccountId(id) { localStorage.setItem(DEFAULT_ACCOUNT_KEY, id) }
 import { useToast } from '../ui/Toast.jsx'
 import { Button } from '../ui/Button.jsx'
 import { Input, Select } from '../ui/Input.jsx'
@@ -96,6 +100,13 @@ export function AccountManager() {
   const [editTarget, setEditTarget] = useState(null)
   const [addSubParentId, setAddSubParentId] = useState(null)
   const [expandedIds, setExpandedIds] = useState(new Set())
+  const [defaultId, setDefaultId] = useState(getDefaultAccountId)
+
+  function handleSetDefault(id) {
+    setDefaultAccountId(id)
+    setDefaultId(id)
+    toast.show({ message: 'Default account updated' })
+  }
 
   function toggleExpand(id) {
     setExpandedIds(prev => {
@@ -155,7 +166,14 @@ export function AccountManager() {
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{acc.name}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{acc.name}</span>
+                  {defaultId === acc.id && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 leading-none">
+                      default
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
                   <span>{acc.type}</span>
                   {subs.length > 0 && (
@@ -171,6 +189,19 @@ export function AccountManager() {
                   {expanded ? '▾' : '▸'}
                 </button>
               )}
+
+              {/* Default star */}
+              <button
+                onClick={() => handleSetDefault(acc.id)}
+                title={defaultId === acc.id ? 'Default account' : 'Set as default'}
+                className={`p-1.5 transition text-base leading-none ${
+                  defaultId === acc.id
+                    ? 'text-yellow-400'
+                    : 'text-gray-200 dark:text-gray-700 hover:text-yellow-400'
+                }`}
+              >
+                ★
+              </button>
 
               <button onClick={() => openAddSub(acc.id)}
                 className="p-1.5 text-gray-400 hover:text-indigo-500 transition text-sm" title="Add sub-account">⊕</button>

@@ -7,6 +7,7 @@ import { Button } from '../ui/Button.jsx'
 import { Input, Select, Textarea } from '../ui/Input.jsx'
 import { toDateString, today } from '../../utils/dateHelpers.js'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
+import { getDefaultAccountId } from '../accounts/AccountManager.jsx'
 
 export function TransactionForm({ transaction, onClose }) {
   const { categories, accounts, addTransaction, editTransaction, topLevelCategories, subCategoriesOf, topLevelAccounts, subAccountsOf } = useApp()
@@ -30,11 +31,13 @@ export function TransactionForm({ transaction, onClose }) {
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
 
-  // Default to bank account for new transactions
+  // Default account for new transactions: user-set default → bank type → first account
   useEffect(() => {
     if (!isEdit && !transaction?.accountId && accounts.length > 0 && !accountId) {
-      const bank = accounts.find(a => a.type === 'bank') ?? accounts[0]
-      if (bank) setAccountId(bank.id)
+      const savedId = getDefaultAccountId()
+      const saved = savedId && accounts.find(a => a.id === savedId)
+      const fallback = accounts.find(a => a.type === 'bank') ?? accounts[0]
+      if (saved || fallback) setAccountId((saved || fallback).id)
     }
   }, [accounts])
 
