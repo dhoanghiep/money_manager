@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { format, parseISO, isValid } from 'date-fns'
+import { api } from '../api/client.js'
 import { useApp } from '../context/AppContext.jsx'
 import { useCurrency } from '../context/CurrencyContext.jsx'
 import { Header } from '../components/layout/Header.jsx'
@@ -11,7 +13,7 @@ import { PageSpinner } from '../components/ui/Spinner.jsx'
 import { getPeriodRange, navigatePeriod, formatMonthYear, formatWeekLabel, today } from '../utils/dateHelpers.js'
 import {
   getTransactionsForDateRange,
-  sumIncome, sumExpense,
+  sumIncome, sumExpense, sumTransferBalance,
   groupByCategory, groupBySubCategory, groupByAccount,
 } from '../utils/aggregations.js'
 import { formatCurrency } from '../utils/currencyFormatter.js'
@@ -59,91 +61,192 @@ function GroupItem({ item, total, currency }) {
 
 // ── Accounts tab ───────────────────────────────────────────────
 
-function AccountsTab({ filtered, currency }) {
+function AccountsTab({ currency }) {
   const { accounts, topLevelAccounts, subAccountsOf } = useApp()
   const navigate = useNavigate()
+  const [allTxns, setAllTxns] = useState([])
+  const [loadingBal, setLoadingBal] = useState(true)
+
+  useEffect(() => {
+    api.getTransactions()
+      .then(res => setAllTxns(res.data || []))
+      .finally(() => setLoadingBal(false))
+  }, [])
+
+  // Balance for any account/sub (all-time)
+  function getBalance(accId, subId = null) {
+    const acc = accounts.find(a => a.id === accId)
+    const base = subId ? 0 : (Number(acc?.initialBalance) || 0)
+    const txns = allTxns.filter(t =>
+      t.accountId === accId &&
+      (subId ? (t.subAccountId || '') === subId : true)
+    )
+    return base + sumIncome(txns) - sumExpense(txns) + sumTransferBalance(txns)
+  }
+
+  const totalBalance = useMemo(
+    () => topLevelAccounts.reduce((s, a) => s + getBalance(a.id), 0),
+    [allTxns, topLevelAccounts]
+  )
+
+  // Monthly breakdown: group allTxns by YYYY-MM, then by accountId
+  const monthlyData = useMemo(() => {
+    const map = {}
+    allTxns.forEach(t => {
+      if (t.type === 'transfer') return          // exclude transfers from activity
+      const raw = String(t.date || '')
+      const d = raw.length >= 7 ? raw.slice(0, 7) : null
+      if (!d) return
+      if (!map[d]) map[d] = {}
+      if (!map[d][t.accountId]) map[d][t.accountId] = { income: 0, expense: 0 }
+      const amt = Number(t.amount) * (Number(t.exchangeRate) || 1)
+      if (t.type === 'income')  map[d][t.accountId].income  += amt
+      if (t.type === 'expense') map[d][t.accountId].expense += amt
+    })
+    // Sort months newest first
+    return Object.entries(map)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([month, byAcc]) => ({ month, byAcc }))
+  }, [allTxns])
+
+  function monthLabel(yyyymm) {
+    try {
+      const d = parseISO(yyyymm + '-01')
+      return isValid(d) ? format(d, 'MMMM yyyy') : yyyymm
+    } catch { return yyyymm }
+  }
 
   return (
-    <div className="flex flex-col gap-3 mx-4">
-      {topLevelAccounts.length === 0 && (
-        <div className="py-12 text-center text-gray-400 dark:text-gray-600 text-sm">No accounts yet</div>
-      )}
-      {topLevelAccounts.map(acc => {
-        const subs = subAccountsOf(acc.id)
-        const accTxns = filtered.filter(t => t.accountId === acc.id)
-        const accInc = sumIncome(accTxns)
-        const accExp = sumExpense(accTxns)
-        const accNet = accInc - accExp
+    <div className="flex flex-col gap-4 pb-4">
 
-        return (
-          <div
-            key={acc.id}
-            className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => navigate(`/accounts/${acc.id}`)}
-          >
-            {/* Account header */}
-            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-100 dark:border-gray-800">
+      {/* ── Total balance hero ── */}
+      <div className="mx-4 rounded-2xl bg-indigo-600 dark:bg-indigo-700 px-5 py-5 shadow-md">
+        <p className="text-xs font-semibold text-indigo-200 mb-1 uppercase tracking-wide">Total Balance</p>
+        {loadingBal ? (
+          <p className="text-2xl font-bold text-white opacity-50">…</p>
+        ) : (
+          <p className="text-3xl font-bold text-white">{formatCurrency(totalBalance, currency)}</p>
+        )}
+        <p className="text-xs text-indigo-300 mt-1">{topLevelAccounts.length} account{topLevelAccounts.length !== 1 ? 's' : ''}</p>
+      </div>
+
+      {/* ── Account balance cards ── */}
+      <div className="flex flex-col gap-3 mx-4">
+        {topLevelAccounts.map(acc => {
+          const subs = subAccountsOf(acc.id)
+          const accBal = loadingBal ? null : getBalance(acc.id)
+
+          return (
+            <div
+              key={acc.id}
+              className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden cursor-pointer active:scale-[0.99] transition-transform"
+              onClick={() => navigate(`/accounts/${acc.id}`)}
+            >
+              {/* Account header + balance */}
               <div
-                className="w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0"
-                style={{ backgroundColor: acc.color + '20' }}
+                className="flex items-center gap-3 px-4 py-4"
+                style={{ borderLeft: `4px solid ${acc.color}` }}
               >
-                {acc.icon}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{acc.name}</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 capitalize">{acc.type}</p>
-              </div>
-              <span className="text-gray-300 dark:text-gray-600 text-lg">›</span>
-            </div>
-
-            {/* Period stats */}
-            <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800">
-              {[
-                { label: 'Income',  value: accInc, cls: 'text-green-600 dark:text-green-400' },
-                { label: 'Expense', value: accExp, cls: 'text-red-500 dark:text-red-400'    },
-                { label: 'Net',     value: accNet, cls: accNet >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-red-500 dark:text-red-400' },
-              ].map(({ label, value, cls }) => (
-                <div key={label} className="flex flex-col items-center py-2.5 px-2">
-                  <span className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">{label}</span>
-                  <span className={`text-xs font-bold ${cls}`}>{formatCurrency(value, currency)}</span>
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0"
+                  style={{ backgroundColor: acc.color + '20' }}
+                >
+                  {acc.icon}
                 </div>
-              ))}
-            </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{acc.name}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 capitalize">{acc.type}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  {accBal === null ? (
+                    <span className="text-sm text-gray-300 dark:text-gray-600">…</span>
+                  ) : (
+                    <span className={`text-base font-bold ${accBal >= 0 ? 'text-gray-900 dark:text-gray-100' : 'text-red-500'}`}>
+                      {formatCurrency(accBal, currency)}
+                    </span>
+                  )}
+                  <span className="text-gray-300 dark:text-gray-600 text-lg ml-2">›</span>
+                </div>
+              </div>
 
-            {/* Sub-account rows */}
-            {subs.length > 0 && (
-              <div className="border-t border-gray-100 dark:border-gray-800">
-                {subs.map(sub => {
-                  const subTxns = accTxns.filter(t => (t.subAccountId || '') === sub.id)
-                  const subInc = sumIncome(subTxns)
-                  const subExp = sumExpense(subTxns)
-                  const subNet = subInc - subExp
-                  if (subInc === 0 && subExp === 0) return null
+              {/* Sub-account balance panels */}
+              {subs.length > 0 && (
+                <div className="flex gap-2 px-3 pb-3 overflow-x-auto no-scrollbar">
+                  {subs.map(sub => {
+                    const subBal = loadingBal ? null : getBalance(acc.id, sub.id)
+                    return (
+                      <div
+                        key={sub.id}
+                        className="flex-shrink-0 rounded-xl px-3 py-2 min-w-[110px]"
+                        style={{ backgroundColor: (sub.color || acc.color) + '14', border: `1px solid ${(sub.color || acc.color)}30` }}
+                      >
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-sm">{sub.icon}</span>
+                          <span className="text-xs font-medium text-gray-600 dark:text-gray-400 truncate">{sub.name}</span>
+                        </div>
+                        <p className={`text-sm font-bold ${subBal === null ? 'text-gray-300' : subBal >= 0 ? 'text-gray-800 dark:text-gray-100' : 'text-red-500'}`}>
+                          {subBal === null ? '…' : formatCurrency(subBal, currency)}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── Monthly activity by account ── */}
+      {monthlyData.length > 0 && (
+        <div className="mx-4">
+          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">
+            Activity by Month
+          </p>
+          <div className="flex flex-col gap-3">
+            {monthlyData.map(({ month, byAcc }) => (
+              <div key={month} className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden">
+                {/* Month header */}
+                <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{monthLabel(month)}</span>
+                </div>
+                {/* Per-account rows */}
+                {Object.entries(byAcc).map(([accId, { income, expense }]) => {
+                  const acc = accounts.find(a => a.id === accId)
+                  if (!acc) return null
+                  const net = income - expense
                   return (
                     <div
-                      key={sub.id}
-                      className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 dark:border-gray-800/50 last:border-0"
-                      onClick={e => { e.stopPropagation(); navigate(`/accounts/${acc.id}`) }}
+                      key={accId}
+                      className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-800/50 last:border-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/30 transition"
+                      onClick={() => navigate(`/accounts/${accId}`)}
                     >
-                      <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ backgroundColor: sub.color || acc.color }} />
                       <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0"
-                        style={{ backgroundColor: (sub.color || acc.color) + '20' }}
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0"
+                        style={{ backgroundColor: acc.color + '20' }}
                       >
-                        {sub.icon}
+                        {acc.icon}
                       </div>
-                      <span className="flex-1 text-xs text-gray-600 dark:text-gray-400">{sub.name}</span>
-                      <span className={`text-xs font-semibold ${subNet >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                        {subNet >= 0 ? '+' : ''}{formatCurrency(subNet, currency)}
-                      </span>
+                      <span className="flex-1 text-sm text-gray-700 dark:text-gray-300 truncate">{acc.name}</span>
+                      <div className="flex items-center gap-3 text-xs flex-shrink-0">
+                        {income > 0 && (
+                          <span className="text-green-600 dark:text-green-400 font-medium">↑{formatCurrency(income, currency)}</span>
+                        )}
+                        {expense > 0 && (
+                          <span className="text-red-500 dark:text-red-400 font-medium">↓{formatCurrency(expense, currency)}</span>
+                        )}
+                        <span className={`font-bold ${net >= 0 ? 'text-gray-700 dark:text-gray-300' : 'text-red-500 dark:text-red-400'}`}>
+                          {net >= 0 ? '+' : ''}{formatCurrency(net, currency)}
+                        </span>
+                      </div>
                     </div>
                   )
                 })}
               </div>
-            )}
+            ))}
           </div>
-        )
-      })}
+        </div>
+      )}
     </div>
   )
 }
@@ -231,7 +334,7 @@ export function DashboardPage() {
         ) : mainTab === 'accounts' ? (
 
           /* ── Accounts tab ── */
-          <AccountsTab filtered={filtered} currency={defaultCurrency} />
+          <AccountsTab currency={defaultCurrency} />
 
         ) : (
 
