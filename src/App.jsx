@@ -7,25 +7,38 @@ import { DashboardPage } from './pages/DashboardPage.jsx'
 import { CalendarPage } from './pages/CalendarPage.jsx'
 import { TransactionsPage } from './pages/TransactionsPage.jsx'
 import { SettingsPage } from './pages/SettingsPage.jsx'
+import { PasswordGate, usePasswordGate } from './components/PasswordGate.jsx'
+
+function AppShell() {
+  const { unlocked, unlock } = usePasswordGate()
+
+  if (!unlocked) {
+    return <PasswordGate onUnlock={unlock} />
+  }
+
+  return (
+    <AppProvider>
+      <HashRouter>
+        <div className="max-w-lg mx-auto relative min-h-screen">
+          <Routes>
+            <Route path="/"             element={<DashboardPage />} />
+            <Route path="/calendar"     element={<CalendarPage />} />
+            <Route path="/transactions" element={<TransactionsPage />} />
+            <Route path="/settings"     element={<SettingsPage />} />
+          </Routes>
+          <BottomNav />
+        </div>
+      </HashRouter>
+    </AppProvider>
+  )
+}
 
 export default function App() {
   return (
     <ThemeProvider>
-      <AppProvider>
-        <ToastProvider>
-          <HashRouter>
-            <div className="max-w-lg mx-auto relative min-h-screen">
-              <Routes>
-                <Route path="/"             element={<DashboardPage />} />
-                <Route path="/calendar"     element={<CalendarPage />} />
-                <Route path="/transactions" element={<TransactionsPage />} />
-                <Route path="/settings"     element={<SettingsPage />} />
-              </Routes>
-              <BottomNav />
-            </div>
-          </HashRouter>
-        </ToastProvider>
-      </AppProvider>
+      <ToastProvider>
+        <AppShell />
+      </ToastProvider>
     </ThemeProvider>
   )
 }
