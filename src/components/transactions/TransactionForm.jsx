@@ -65,23 +65,29 @@ export function TransactionForm({ transaction, onClose }) {
     }
   }, [currency, defaultCurrency])
 
-  // Reset / pre-fill sub-category when parent category changes
+  // Use prevValue refs to skip reset on initial mount — avoids the ordering
+  // issue with a shared didMount flag where effects fire in declaration order.
+  const prevCatId     = useRef(categoryId)
+  const prevAccId     = useRef(accountId)
+  const prevFromAccId = useRef(accountId)
+  const prevToAccId   = useRef(toAccountId)
+
+  // Reset / pre-fill sub-category when parent category changes (skip mount)
   useEffect(() => {
-    if (!didMount.current) return           // skip on mount (preserve edit value)
+    const prev = prevCatId.current
+    prevCatId.current = categoryId
+    if (prev === categoryId) return                    // no change on mount
     if (!categoryId) { setSubCategoryId(''); return }
     if (isEdit) { setSubCategoryId(''); return }
     const savedSub = getDefaultSubCategoryId(categoryId)
     setSubCategoryId(savedSub || '')
   }, [categoryId])
 
-  // Track whether this is the initial render — skip auto-fill effects on mount
-  // so that existing values on edit forms are preserved.
-  const didMount = useRef(false)
-  useEffect(() => { didMount.current = true }, [])
-
-  // Auto-select default sub-account when parent account changes (new txn only)
+  // Auto-select default sub-account when account changes (skip mount; preserve in edit)
   useEffect(() => {
-    if (!didMount.current) return                      // skip on mount
+    const prev = prevAccId.current
+    prevAccId.current = accountId
+    if (prev === accountId) return                     // no change on mount
     if (!accountId) { setSubAccountId(''); return }
     if (isEdit) { setSubAccountId(''); return }        // account changed in edit → clear
     const savedSub = getDefaultSubAccountId(accountId)
@@ -90,11 +96,15 @@ export function TransactionForm({ transaction, onClose }) {
 
   // Reset transfer sub-accounts when parent accounts change (skip mount)
   useEffect(() => {
-    if (!didMount.current) return
+    const prev = prevFromAccId.current
+    prevFromAccId.current = accountId
+    if (prev === accountId) return
     setFromSubAccountId(accountId ? (getDefaultSubAccountId(accountId) || '') : '')
   }, [accountId])
   useEffect(() => {
-    if (!didMount.current) return
+    const prev = prevToAccId.current
+    prevToAccId.current = toAccountId
+    if (prev === toAccountId) return
     setToSubAccountId(toAccountId ? (getDefaultSubAccountId(toAccountId) || '') : '')
   }, [toAccountId])
 

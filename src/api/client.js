@@ -122,6 +122,15 @@ export const api = {
     return request('POST', {}, { action: 'applyDueSchedules' })
   },
 
+  // ── Preferences ───────────────────────────────────────────
+  getPreferences() {
+    return request('GET', { action: 'getPreferences' })
+  },
+
+  setPreference(key, value) {
+    return request('POST', {}, { action: 'setPreference', data: { key, value } })
+  },
+
   ping() {
     return request('GET', { action: 'ping' })
   },

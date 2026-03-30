@@ -17,6 +17,7 @@ const SHEET_NAMES = {
   CATEGORIES: 'Categories',
   ACCOUNTS: 'Accounts',
   SCHEDULES: 'Schedules',
+  PREFERENCES: 'Preferences',
 };
 
 // ── Entry Points ─────────────────────────────────────────────
@@ -37,6 +38,9 @@ function doGet(e) {
         break;
       case 'getSchedules':
         result = getSchedules();
+        break;
+      case 'getPreferences':
+        result = getPreferences();
         break;
       case 'ping':
         result = { ok: true, timestamp: new Date().toISOString() };
@@ -109,6 +113,9 @@ function doPost(e) {
         break;
       case 'deleteTransfer':
         result = deleteTransfer(body.transferId);
+        break;
+      case 'setPreference':
+        result = setPreference(data.key, data.value);
         break;
       default:
         result = { error: 'Unknown action: ' + action };
@@ -238,6 +245,39 @@ function deleteTransfer(transferId) {
   for (var i = rows.length - 1; i >= 1; i--) {
     if (rows[i][tCol] === transferId) sheet.deleteRow(i + 1);
   }
+  return { ok: true };
+}
+
+// ── Preferences ───────────────────────────────────────────────
+
+function getOrCreatePreferencesSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAMES.PREFERENCES);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAMES.PREFERENCES);
+    sheet.appendRow(['key', 'value']);
+  }
+  return sheet;
+}
+
+function getPreferences() {
+  const sheet = getOrCreatePreferencesSheet();
+  return { data: sheetToObjects(sheet) };
+}
+
+function setPreference(key, value) {
+  const sheet = getOrCreatePreferencesSheet();
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  const keyCol = headers.indexOf('key');
+  const valCol = headers.indexOf('value');
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][keyCol] === key) {
+      sheet.getRange(i + 1, valCol + 1).setValue(value);
+      return { ok: true };
+    }
+  }
+  sheet.appendRow([key, value]);
   return { ok: true };
 }
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
+import { api } from '../../api/client.js'
 import { useToast } from '../ui/Toast.jsx'
 import { Button } from '../ui/Button.jsx'
 import { Input, Select } from '../ui/Input.jsx'
@@ -100,12 +101,14 @@ export function CategoryManager() {
   function handleSetDefault(id) {
     setDefaultCategoryId(id)
     setDefaultId(id)
+    api.setPreference('mm_default_category_id', id).catch(() => {})
     toast.show({ message: 'Default category updated' })
   }
 
   function handleSetDefaultSub(parentId, subId) {
     setDefaultSubCategoryId(parentId, subId)
     setDefaultSubIds(prev => ({ ...prev, [parentId]: subId }))
+    api.setPreference('mm_default_subcategory_' + parentId, subId).catch(() => {})
     toast.show({ message: 'Default sub-category updated' })
   }
 

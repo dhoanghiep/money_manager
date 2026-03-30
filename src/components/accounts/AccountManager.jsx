@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
+import { api } from '../../api/client.js'
 
 const DEFAULT_ACCOUNT_KEY = 'mm_default_account_id'
 export function getDefaultAccountId() { return localStorage.getItem(DEFAULT_ACCOUNT_KEY) || '' }
@@ -110,12 +111,14 @@ export function AccountManager() {
   function handleSetDefault(id) {
     setDefaultAccountId(id)
     setDefaultId(id)
+    api.setPreference('mm_default_account_id', id).catch(() => {})
     toast.show({ message: 'Default account updated' })
   }
 
   function handleSetDefaultSub(parentId, subId) {
     setDefaultSubAccountId(parentId, subId)
     setDefaultSubIds(prev => ({ ...prev, [parentId]: subId }))
+    api.setPreference('mm_default_subaccount_' + parentId, subId).catch(() => {})
     toast.show({ message: 'Default sub-account updated' })
   }
 

@@ -80,6 +80,7 @@ export function AppProvider({ children }) {
 
   // Load categories and accounts once on mount
   useEffect(() => {
+    loadPreferences()
     loadCategories()
     loadAccounts()
     loadSchedules()
@@ -87,6 +88,20 @@ export function AppProvider({ children }) {
     const { start, end } = getMonthRange(new Date())
     loadTransactions(start, end)
   }, [])
+
+  async function loadPreferences() {
+    try {
+      const res = await api.getPreferences()
+      const prefs = res.data || []
+      prefs.forEach(({ key, value }) => {
+        if (key && value !== undefined && value !== null && value !== '') {
+          localStorage.setItem(key, String(value))
+        }
+      })
+    } catch (e) {
+      console.warn('Could not load preferences from DB:', e.message)
+    }
+  }
 
   async function loadCategories() {
     dispatch({ type: 'SET_LOADING', payload: { categories: true } })

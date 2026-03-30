@@ -8,7 +8,7 @@ import { formatCurrency } from '../../utils/currencyFormatter.js'
 import { formatDisplay } from '../../utils/dateHelpers.js'
 
 export function TransactionItem({ transaction, showDate = false }) {
-  const { categories, accounts, removeTransaction, removeTransfer } = useApp()
+  const { categories, accounts, transactions, removeTransaction, removeTransfer } = useApp()
   const { defaultCurrency } = useCurrency()
   const toast = useToast()
   const [editOpen, setEditOpen] = useState(false)
@@ -20,10 +20,20 @@ export function TransactionItem({ transaction, showDate = false }) {
   const subCategory = categories.find(c => c.id === transaction.subCategoryId)
   const account = accounts.find(a => a.id === transaction.accountId)
   const subAccount = accounts.find(a => a.id === transaction.subAccountId)
+
+  // When fromAccountId/toAccountId are missing (old rows before migration),
+  // look up the other leg of the transfer to resolve the counterpart.
+  const otherLeg = isTransfer && transaction.transferId
+    ? transactions.find(t => t.transferId === transaction.transferId && t.id !== transaction.id)
+    : null
+  const fromAccountId = transaction.fromAccountId || (otherLeg ? otherLeg.accountId : null)
+  const toAccountId   = transaction.toAccountId   || (otherLeg ? transaction.accountId : null)
+
   // Transfer direction: is money leaving this account?
-  const transferOut = isTransfer && transaction.accountId === transaction.fromAccountId
-  const counterpartId = isTransfer ? (transferOut ? transaction.toAccountId : transaction.fromAccountId) : null
+  const transferOut = isTransfer && !!(fromAccountId) && transaction.accountId === fromAccountId
+  const counterpartId = isTransfer ? (transferOut ? toAccountId : fromAccountId) : null
   const counterpart = accounts.find(a => a.id === counterpartId)
+  const directionLabel = isTransfer ? (fromAccountId ? (transferOut ? 'To' : 'From') : '⇄') : null
   const isIncome = transaction.type === 'income'
 
   // Hide delete for transactions older than 2 days
@@ -77,9 +87,9 @@ export function TransactionItem({ transaction, showDate = false }) {
               {isTransfer ? (
                 <>
                   <span className="text-gray-400 dark:text-gray-500 font-normal text-xs">
-                    {transferOut ? 'To' : 'From'}
+                    {directionLabel}
                   </span>
-                  {' '}{counterpart ? `${counterpart.icon} ${counterpart.name}` : 'Unknown'}
+                  {' '}{counterpart ? `${counterpart.icon} ${counterpart.name}` : '?'}
                 </>
               ) : (
                 <>
