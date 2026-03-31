@@ -775,6 +775,16 @@ function getScheduleTransactionCount(scheduleId) {
   return { count: count };
 }
 
+// Google Sheets getValues() returns date cells as Date objects, not strings.
+// This helper normalizes them to 'yyyy-MM-dd' for safe string comparisons.
+function normDateStr(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return String(val).substring(0, 10); // handles 'yyyy-MM-ddTHH:...' too
+}
+
 // Called on app load (and after creating a new schedule) — creates transactions
 // for any overdue schedules and advances their nextDate past today.
 function applyDueSchedules() {
@@ -799,10 +809,11 @@ function applyDueSchedules() {
     const row = rows[i];
     if (!row[col['isActive']]) continue;
 
-    const endDate = row[col['endDate']];
-    if (endDate && endDate < today) continue;  // schedule fully expired (note: < not <=)
+    // Normalize dates — Sheets returns Date objects, not strings
+    const endDate = normDateStr(row[col['endDate']]);
+    if (endDate && endDate < today) continue;  // schedule fully expired
 
-    var nextDate = row[col['nextDate']];
+    var nextDate = normDateStr(row[col['nextDate']]);
     if (!nextDate || nextDate > today) continue; // not due yet
 
     const frequency = row[col['frequency']];
