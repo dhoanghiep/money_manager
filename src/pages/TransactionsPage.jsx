@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { format } from 'date-fns'
 import { useApp } from '../context/AppContext.jsx'
 import { Header } from '../components/layout/Header.jsx'
 import { TransactionList } from '../components/transactions/TransactionList.jsx'
@@ -9,7 +10,7 @@ import { PageSpinner } from '../components/ui/Spinner.jsx'
 import { formatCurrency } from '../utils/currencyFormatter.js'
 import { sumIncome, sumExpense } from '../utils/aggregations.js'
 import { api } from '../api/client.js'
-import { getMonthRange, toDateString } from '../utils/dateHelpers.js'
+import { getMonthRange, getWeekRange, getQuarterRange, getYearRange } from '../utils/dateHelpers.js'
 
 export function TransactionsPage() {
   const { categories, accounts } = useApp() // Only for filters, not for transactions
@@ -17,11 +18,20 @@ export function TransactionsPage() {
   const [filters, setFilters] = useState({ type: '', categoryId: '', accountId: '' })
   const [search, setSearch] = useState('')
 
-  // Date range state (default to current month)
+  // Period and date range state (default to current month)
   const today = new Date()
-  const monthRange = getMonthRange(today)
-  const [startDate, setStartDate] = useState(monthRange.start)
-  const [endDate, setEndDate] = useState(monthRange.end)
+  const [period, setPeriod] = useState('month')
+  const [refDate, setRefDate] = useState(today)
+
+  const range = useMemo(() => {
+    switch (period) {
+      case 'week': return getWeekRange(refDate)
+      case 'month': return getMonthRange(refDate)
+      case 'quarter': return getQuarterRange(refDate)
+      case 'year': return getYearRange(refDate)
+      default: return getMonthRange(refDate)
+    }
+  }, [period, refDate])
 
   // Transactions loaded from API
   const [transactions, setTransactions] = useState([])
@@ -35,8 +45,9 @@ export function TransactionsPage() {
       setLoading(true)
       setError('')
       try {
-        const data = await api.getTransactions(startDate, endDate)
-        setTransactions(data || [])
+        const data = await api.getTransactions(range.start, range.end)
+        // Ensure data is an array
+        setTransactions(Array.isArray(data) ? data : [])
       } catch (err) {
         setError(err.message)
         setTransactions([])
@@ -45,7 +56,7 @@ export function TransactionsPage() {
       }
     }
     loadTransactions()
-  }, [startDate, endDate])
+  }, [range])
 
   // Refetch when add modal closes (user may have added a transaction)
   useEffect(() => {
@@ -53,8 +64,8 @@ export function TransactionsPage() {
       // Modal just closed - refetch transactions
       async function refetch() {
         try {
-          const data = await api.getTransactions(startDate, endDate)
-          setTransactions(data || [])
+          const data = await api.getTransactions(range.start, range.end)
+          setTransactions(Array.isArray(data) ? data : [])
         } catch (err) {
           console.error('Failed to refetch transactions:', err)
         }
@@ -62,9 +73,10 @@ export function TransactionsPage() {
       refetch()
     }
     prevAddOpen.current = addOpen
-  }, [addOpen, startDate, endDate])
+  }, [addOpen, range])
 
   const filtered = useMemo(() => {
+    if (!Array.isArray(transactions)) return []
     return transactions.filter(t => {
       if (filters.type && t.type !== filters.type) return false
       if (filters.categoryId && t.categoryId !== filters.categoryId) return false
@@ -91,23 +103,63 @@ export function TransactionsPage() {
         }
       />
 
-      {/* Date range filter */}
+      {/* Period selector */}
       <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/30">
-        <div className="flex gap-2 items-center text-sm">
-          <label className="text-gray-600 dark:text-gray-400 font-medium">Date range:</label>
-          <input
-            type="date"
-            value={startDate}
-            onChange={e => setStartDate(e.target.value)}
-            className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <span className="text-gray-400">→</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={e => setEndDate(e.target.value)}
-            className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
+        <div className="flex gap-2 justify-center mb-3">
+          {['Week', 'Month', 'Quarter', 'Year'].map(p => (
+            <button
+              key={p}
+              onClick={() => { setPeriod(p.toLowerCase()); setRefDate(new Date()) }}
+              className={`px-4 py-2 rounded-xl font-medium text-sm transition ${
+                period === p.toLowerCase()
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+
+        {/* Navigation and date display */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => {
+              const d = new Date(refDate)
+              if (period === 'week') d.setDate(d.getDate() - 7)
+              else if (period === 'month') d.setMonth(d.getMonth() - 1)
+              else if (period === 'quarter') d.setMonth(d.getMonth() - 3)
+              else if (period === 'year') d.setFullYear(d.getFullYear() - 1)
+              setRefDate(d)
+            }}
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl"
+          >
+            ‹
+          </button>
+
+          <div className="text-center text-gray-900 dark:text-white font-semibold">
+            {period === 'week'
+              ? `${format(range.startDate, 'MMM d')} - ${format(range.endDate, 'MMM d, yyyy')}`
+              : period === 'month'
+              ? format(refDate, 'MMMM yyyy')
+              : period === 'quarter'
+              ? `Q${Math.ceil((refDate.getMonth() + 1) / 3)} ${refDate.getFullYear()}`
+              : refDate.getFullYear().toString()}
+          </div>
+
+          <button
+            onClick={() => {
+              const d = new Date(refDate)
+              if (period === 'week') d.setDate(d.getDate() + 7)
+              else if (period === 'month') d.setMonth(d.getMonth() + 1)
+              else if (period === 'quarter') d.setMonth(d.getMonth() + 3)
+              else if (period === 'year') d.setFullYear(d.getFullYear() + 1)
+              setRefDate(d)
+            }}
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl"
+          >
+            ›
+          </button>
         </div>
       </div>
 
