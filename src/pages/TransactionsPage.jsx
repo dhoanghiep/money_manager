@@ -35,45 +35,36 @@ export function TransactionsPage() {
 
   // Transactions loaded from API
   const [transactions, setTransactions] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true) // start true — shows spinner on first render
   const [error, setError] = useState('')
   const prevAddOpen = useRef(addOpen)
 
-  // Fetch transactions when date range changes
-  useEffect(() => {
-    async function loadTransactions() {
-      setLoading(true)
-      setError('')
-      try {
-        const data = await api.getTransactions(range.start, range.end)
-        // Ensure data is an array
-        setTransactions(Array.isArray(data) ? data : [])
-      } catch (err) {
-        setError(err.message)
-        setTransactions([])
-      } finally {
-        setLoading(false)
-      }
+  async function fetchTransactions(start, end) {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await api.getTransactions(start, end)
+      setTransactions(Array.isArray(data) ? data : [])
+    } catch (err) {
+      setError(err.message)
+      setTransactions([])
+    } finally {
+      setLoading(false)
     }
-    loadTransactions()
-  }, [range])
+  }
+
+  // Fetch whenever the period/refDate changes (use string values — not object ref)
+  useEffect(() => {
+    fetchTransactions(range.start, range.end)
+  }, [range.start, range.end])
 
   // Refetch when add modal closes (user may have added a transaction)
   useEffect(() => {
     if (prevAddOpen.current && !addOpen) {
-      // Modal just closed - refetch transactions
-      async function refetch() {
-        try {
-          const data = await api.getTransactions(range.start, range.end)
-          setTransactions(Array.isArray(data) ? data : [])
-        } catch (err) {
-          console.error('Failed to refetch transactions:', err)
-        }
-      }
-      refetch()
+      fetchTransactions(range.start, range.end)
     }
     prevAddOpen.current = addOpen
-  }, [addOpen, range])
+  }, [addOpen])
 
   const filtered = useMemo(() => {
     if (!Array.isArray(transactions)) return []

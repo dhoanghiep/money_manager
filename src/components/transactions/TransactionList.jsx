@@ -1,9 +1,12 @@
+import { useState, useEffect } from 'react'
 import { TransactionItem } from './TransactionItem.jsx'
 import { groupByDate } from '../../utils/aggregations.js'
 import { formatDisplay } from '../../utils/dateHelpers.js'
 import { EmptyState } from '../ui/EmptyState.jsx'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
 import { sumIncome, sumExpense } from '../../utils/aggregations.js'
+
+const PAGE_SIZE = 50
 
 // For each transferId keep only one row (prefer outflow leg → shows "To X").
 function dedupeTransfers(txns) {
@@ -22,24 +25,49 @@ function dedupeTransfers(txns) {
   return out
 }
 
+function ShowMoreButton({ shown, total, onMore }) {
+  const remaining = total - shown
+  if (remaining <= 0) return null
+  return (
+    <button
+      onClick={onMore}
+      className="w-full py-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition"
+    >
+      Show {Math.min(remaining, PAGE_SIZE)} more <span className="text-gray-400 dark:text-gray-500">({remaining} remaining)</span>
+    </button>
+  )
+}
+
 export function TransactionList({ transactions, showDateHeaders = true, transferNeutral = false }) {
+  const [page, setPage] = useState(1)
+
+  // Reset to first page whenever the transactions list changes
+  useEffect(() => { setPage(1) }, [transactions])
+
   if (!transactions || transactions.length === 0) {
     return <EmptyState icon="💸" title="No transactions" description="Tap + to add your first transaction" />
   }
 
   const deduped = dedupeTransfers(transactions)
+  const limit   = page * PAGE_SIZE
+  const visible = deduped.slice(0, limit)
 
   if (!showDateHeaders) {
     return (
-      <div className="divide-y divide-gray-100 dark:divide-gray-800">
-        {deduped.map(t => (
-          <TransactionItem key={t.id} transaction={t} showDate transferNeutral={transferNeutral} />
-        ))}
+      <div>
+        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+          {visible.map(t => (
+            <TransactionItem key={t.id} transaction={t} showDate transferNeutral={transferNeutral} />
+          ))}
+        </div>
+        <ShowMoreButton shown={visible.length} total={deduped.length} onMore={() => setPage(p => p + 1)} />
       </div>
     )
   }
 
-  const grouped = groupByDate(deduped)
+  // For date-grouped view, slice by grouped days to keep date headers intact
+  const grouped = groupByDate(visible)
+  const allGrouped = groupByDate(deduped)
 
   return (
     <div>
@@ -66,6 +94,7 @@ export function TransactionList({ transactions, showDateHeaders = true, transfer
           </div>
         )
       })}
+      <ShowMoreButton shown={visible.length} total={deduped.length} onMore={() => setPage(p => p + 1)} />
     </div>
   )
 }
