@@ -832,7 +832,7 @@ function applyDueSchedules() {
         row[col['type']],
         row[col['categoryId']] || '',
         row[col['accountId']] || '',
-        row[col['note']] || '',
+        'Schedule: ' + (row[col['name']] || '') + (row[col['note']] ? ' · ' + row[col['note']] : ''),
         now,
         now,
       ]);
