@@ -643,6 +643,27 @@ function addTransferColumns() {
   Logger.log('Transfer migration complete!');
 }
 
+// ── Schedules subCategoryId Column Migration ──────────────────
+// Run once to add subCategoryId to the Schedules sheet (after categoryId).
+function addScheduleSubCategoryColumn() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Schedules');
+  if (!sheet) { Logger.log('Schedules sheet not found'); return; }
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (headers.indexOf('subCategoryId') === -1) {
+    var catColIdx = headers.indexOf('categoryId');
+    if (catColIdx !== -1) {
+      sheet.insertColumnAfter(catColIdx + 1);
+      sheet.getRange(1, catColIdx + 2).setValue('subCategoryId');
+    } else {
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue('subCategoryId');
+    }
+    Logger.log('Added subCategoryId column to Schedules');
+  } else {
+    Logger.log('subCategoryId column already exists in Schedules');
+  }
+}
+
 // ── Schedules subAccountId Column Migration ───────────────────
 // Run once to add subAccountId to the Schedules sheet.
 function addScheduleSubAccountColumn() {
@@ -704,7 +725,7 @@ function addCurrencyColumns() {
 }
 
 // ── Schedules ─────────────────────────────────────────────────
-// Columns: id | name | amount | type | categoryId | accountId | subAccountId | note | frequency | startDate | nextDate | endDate | isActive | createdAt
+// Columns: id | name | amount | type | categoryId | subCategoryId | accountId | subAccountId | note | frequency | startDate | nextDate | endDate | isActive | createdAt
 
 function getSchedules() {
   return { data: sheetToObjects(getSheet(SHEET_NAMES.SCHEDULES)) };
@@ -730,12 +751,15 @@ function addSchedule(data) {
     true,             // isActive
     now,
   ]);
-  // Write subAccountId to the correct column (header-aware, safe for existing sheets)
+  // Write subCategoryId and subAccountId header-aware (safe for existing sheets without these columns)
+  var newRow = sheet.getLastRow();
+  if (data.subCategoryId) {
+    var subCatCol = headers.indexOf('subCategoryId');
+    if (subCatCol !== -1) sheet.getRange(newRow, subCatCol + 1).setValue(data.subCategoryId);
+  }
   if (data.subAccountId) {
     var subAccCol = headers.indexOf('subAccountId');
-    if (subAccCol !== -1) {
-      sheet.getRange(sheet.getLastRow(), subAccCol + 1).setValue(data.subAccountId);
-    }
+    if (subAccCol !== -1) sheet.getRange(newRow, subAccCol + 1).setValue(data.subAccountId);
   }
   return { ok: true, id: id };
 }
@@ -749,7 +773,7 @@ function updateSchedule(id, data) {
   for (var i = 1; i < rows.length; i++) {
     if (rows[i][idCol] === id) {
       const rowNum = i + 1;
-      const fields = ['name','amount','type','categoryId','accountId','subAccountId','note','frequency','startDate','nextDate','endDate','isActive'];
+      const fields = ['name','amount','type','categoryId','subCategoryId','accountId','subAccountId','note','frequency','startDate','nextDate','endDate','isActive'];
       fields.forEach(function(f) {
         var colIdx = headers.indexOf(f);
         if (data[f] !== undefined && colIdx !== -1) {
@@ -850,11 +874,13 @@ function applyDueSchedules() {
     var nextDate = normDateStr(row[col['nextDate']]);
     if (!nextDate || nextDate > today) continue; // not due yet
 
-    const frequency   = row[col['frequency']];
-    const scheduleId  = row[col['id']];
-    const subAccountId = col['subAccountId'] !== undefined ? (row[col['subAccountId']] || '') : '';
+    const frequency    = row[col['frequency']];
+    const scheduleId   = row[col['id']];
+    const subCategoryId = col['subCategoryId'] !== undefined ? (row[col['subCategoryId']] || '') : '';
+    const subAccountId  = col['subAccountId']  !== undefined ? (row[col['subAccountId']]  || '') : '';
 
     // Column indices for targeted writes on the transaction sheet
+    const subCatTxCol = txHeaders.indexOf('subCategoryId');
     const subAccTxCol = txHeaders.indexOf('subAccountId');
 
     // Apply all missed periods up to and including today
@@ -875,11 +901,13 @@ function applyDueSchedules() {
         now,
       ]);
       const newTxRow = txSheet.getLastRow();
-      // Write subAccountId (header-aware)
+      // Write optional fields header-aware (safe for existing sheets)
+      if (subCatTxCol !== -1 && subCategoryId) {
+        txSheet.getRange(newTxRow, subCatTxCol + 1).setValue(subCategoryId);
+      }
       if (subAccTxCol !== -1 && subAccountId) {
         txSheet.getRange(newTxRow, subAccTxCol + 1).setValue(subAccountId);
       }
-      // Write scheduleId (header-aware)
       if (schIdCol !== -1) {
         txSheet.getRange(newTxRow, schIdCol + 1).setValue(scheduleId);
       }
@@ -949,7 +977,7 @@ function setupSheets() {
   ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt', 'subCategoryId', 'currency', 'exchangeRate', 'subAccountId', 'transferId', 'fromAccountId', 'toAccountId', 'scheduleId']);
   ensureSheet(SHEET_NAMES.CATEGORIES,   ['id', 'name', 'color', 'icon', 'type', 'isDefault', 'parentId']);
   ensureSheet(SHEET_NAMES.ACCOUNTS,     ['id', 'name', 'color', 'icon', 'type', 'initialBalance', 'isDefault']);
-  ensureSheet(SHEET_NAMES.SCHEDULES,    ['id', 'name', 'amount', 'type', 'categoryId', 'accountId', 'subAccountId', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'isActive', 'createdAt']);
+  ensureSheet(SHEET_NAMES.SCHEDULES,    ['id', 'name', 'amount', 'type', 'categoryId', 'subCategoryId', 'accountId', 'subAccountId', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'isActive', 'createdAt']);
 
   Logger.log('Sheets set up successfully!');
 }

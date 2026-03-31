@@ -28,7 +28,13 @@ function reducer(state, action) {
     case 'ADD_SCHEDULE':
       return { ...state, schedules: [...state.schedules, action.payload] }
     case 'UPDATE_SCHEDULE':
-      return { ...state, schedules: state.schedules.map(s => s.id === action.payload.id ? action.payload : s) }
+      // payload = { id, data } — merge into existing schedule so stale-closure is never an issue
+      return {
+        ...state,
+        schedules: state.schedules.map(s =>
+          s.id === action.payload.id ? { ...s, ...action.payload.data } : s
+        ),
+      }
     case 'REMOVE_SCHEDULE':
       return { ...state, schedules: state.schedules.filter(s => s.id !== action.payload) }
     case 'SET_TRANSACTIONS':
@@ -273,9 +279,7 @@ export function AppProvider({ children }) {
 
   async function editSchedule(id, data) {
     await api.updateSchedule(id, data)
-    const updated = { ...state.schedules.find(s => s.id === id), ...data }
-    dispatch({ type: 'UPDATE_SCHEDULE', payload: updated })
-    return updated
+    dispatch({ type: 'UPDATE_SCHEDULE', payload: { id, data } })
   }
 
   async function removeSchedule(id, deleteTxns = false) {

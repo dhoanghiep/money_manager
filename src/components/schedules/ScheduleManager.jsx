@@ -20,31 +20,31 @@ const FREQUENCIES = [
 // ── Schedule Form ─────────────────────────────────────────────
 
 function ScheduleForm({ schedule, onClose }) {
-  const { categories, topLevelAccounts, subAccountsOf, addSchedule, editSchedule } = useApp()
+  const { topLevelCategories, subCategoriesOf, topLevelAccounts, subAccountsOf, addSchedule, editSchedule } = useApp()
   const toast = useToast()
   const isEdit = !!schedule?.id
 
-  const [name, setName] = useState(schedule?.name || '')
-  const [type, setType] = useState(schedule?.type || 'expense')
-  const [amount, setAmount] = useState(schedule?.amount?.toString() || '')
-  const [categoryId, setCategoryId] = useState(schedule?.categoryId || '')
+  const [name, setName]           = useState(schedule?.name || '')
+  const [type, setType]           = useState(schedule?.type || 'expense')
+  const [amount, setAmount]       = useState(schedule?.amount?.toString() || '')
+  const [categoryId, setCategoryId]       = useState(schedule?.categoryId || '')
+  const [subCategoryId, setSubCategoryId] = useState(schedule?.subCategoryId || '')
   const [accountId, setAccountId] = useState(() => {
     if (schedule?.accountId) return schedule.accountId
     const bank = topLevelAccounts.find(a => a.type === 'bank') ?? topLevelAccounts[0]
     return bank?.id || ''
   })
   const [subAccountId, setSubAccountId] = useState(schedule?.subAccountId || '')
-  const [note, setNote] = useState(schedule?.note || '')
+  const [note, setNote]           = useState(schedule?.note || '')
   const [frequency, setFrequency] = useState(schedule?.frequency || 'monthly')
   const [startDate, setStartDate] = useState(schedule?.startDate || toDateString(today()))
-  const [endDate, setEndDate] = useState(schedule?.endDate || '')
-  const [loading, setLoading] = useState(false)
+  const [endDate, setEndDate]     = useState(schedule?.endDate || '')
+  const [loading, setLoading]     = useState(false)
 
-  const filteredCategories = categories.filter(c => c.type === type || c.type === 'both')
+  // Derive filtered lists
+  const filteredCategories  = topLevelCategories.filter(c => c.type === type || c.type === 'both')
+  const availableSubCats    = categoryId ? subCategoriesOf(categoryId) : []
   const availableSubAccounts = accountId ? subAccountsOf(accountId) : []
-
-  // Reset sub-account when main account changes
-  useEffect(() => { setSubAccountId('') }, [accountId])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -55,9 +55,10 @@ function ScheduleForm({ schedule, onClose }) {
         name: name.trim(),
         type,
         amount: Number(amount),
-        categoryId: categoryId || '',
-        accountId: accountId || '',
-        subAccountId: subAccountId || '',
+        categoryId:    categoryId    || '',
+        subCategoryId: subCategoryId || '',
+        accountId:     accountId     || '',
+        subAccountId:  subAccountId  || '',
         note: note.trim(),
         frequency,
         startDate,
@@ -84,7 +85,7 @@ function ScheduleForm({ schedule, onClose }) {
       <div className="flex rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
         {['expense', 'income'].map(t => (
           <button key={t} type="button"
-            onClick={() => { setType(t); setCategoryId('') }}
+            onClick={() => { setType(t); setCategoryId(''); setSubCategoryId('') }}
             className={`flex-1 py-2.5 text-sm font-semibold transition ${
               type === t
                 ? t === 'income' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
@@ -116,12 +117,21 @@ function ScheduleForm({ schedule, onClose }) {
         <Input label="End Date (optional)" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
       </div>
 
-      <Select label="Category" value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+      {/* Category + sub-category */}
+      <Select label="Category" value={categoryId} onChange={e => { setCategoryId(e.target.value); setSubCategoryId('') }}>
         <option value="">— No category —</option>
         {filteredCategories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
       </Select>
 
-      <Select label="Account" value={accountId} onChange={e => setAccountId(e.target.value)}>
+      {availableSubCats.length > 0 && (
+        <Select label="Sub-category" value={subCategoryId} onChange={e => setSubCategoryId(e.target.value)}>
+          <option value="">General</option>
+          {availableSubCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+        </Select>
+      )}
+
+      {/* Account + sub-account */}
+      <Select label="Account" value={accountId} onChange={e => { setAccountId(e.target.value); setSubAccountId('') }}>
         <option value="">— No account —</option>
         {topLevelAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
       </Select>
@@ -272,6 +282,7 @@ export function ScheduleManager() {
             </div>
             {list.map(sch => {
               const cat    = categories.find(c => c.id === sch.categoryId)
+              const subCat = sch.subCategoryId ? categories.find(c => c.id === sch.subCategoryId) : null
               const acc    = accounts.find(a => a.id === sch.accountId)
               const subAcc = sch.subAccountId ? subAccountsOf(sch.accountId).find(a => a.id === sch.subAccountId) : null
               const isIncome = sch.type === 'income'
@@ -293,7 +304,7 @@ export function ScheduleManager() {
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-400 dark:text-gray-500">
                       <span>{FREQ_LABEL[sch.frequency]}</span>
-                      {cat && <span>· {cat.icon} {cat.name}</span>}
+                      {cat && <span>· {cat.icon} {cat.name}{subCat ? ` › ${subCat.name}` : ''}</span>}
                       {acc && <span>· {acc.icon} {acc.name}{subAcc ? ` › ${subAcc.name}` : ''}</span>}
                       {sch.nextDate && (
                         <span className="ml-auto text-indigo-500 dark:text-indigo-400 font-medium">
