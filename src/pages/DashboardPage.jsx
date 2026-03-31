@@ -319,7 +319,7 @@ function AccountsTab({ currency }) {
 
 // ── Stats tab ─────────────────────────────────────────────────
 
-function StatsTab({ currency }) {
+function StatsTab({ currency, onDrillDown }) {
   const { categories, accounts } = useApp()
   const [period, setPeriod] = useState('month')
   const [refDate, setRefDate] = useState(today())
@@ -327,7 +327,6 @@ function StatsTab({ currency }) {
   const [groupMode, setGroupMode] = useState('category')
   const [periodTxns, setPeriodTxns] = useState([])
   const [loading, setLoading] = useState(false)
-  const [drillDown, setDrillDown] = useState(null) // { filter, label, icon, color }
 
   const range = useMemo(() => getPeriodRange(period, refDate), [period, refDate])
 
@@ -416,22 +415,10 @@ function StatsTab({ currency }) {
 
   // ── Drill-down helper ────────────────────────────────────────
   function openDrillDown(filter, label, icon, color) {
-    setDrillDown({ filter, label, icon, color })
+    onDrillDown({ filter, label, icon, color, txType, initPeriod: period })
   }
 
   return (
-    <>
-    {drillDown && (
-      <DrillDownView
-        filter={drillDown.filter}
-        label={drillDown.label}
-        icon={drillDown.icon}
-        color={drillDown.color}
-        txType={txType}
-        initPeriod={period}
-        onClose={() => setDrillDown(null)}
-      />
-    )}
     <div className="flex flex-col gap-0">
       {/* Period bar */}
       <div className="px-4 pt-3 pb-2 flex flex-col gap-2">
@@ -592,7 +579,6 @@ function StatsTab({ currency }) {
         </>
       )}
     </div>
-    </>
   )
 }
 
@@ -603,9 +589,20 @@ export function DashboardPage() {
   const { defaultCurrency } = useCurrency()
   const [mainTab, setMainTab] = useState('accounts') // 'accounts' | 'stats'
   const [addOpen, setAddOpen] = useState(false)
+  const [drillDown, setDrillDown] = useState(null)   // drill-down overlay state
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-950">
+    // relative so DrillDownView (absolute inset-0) is constrained to this container
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-950 relative">
+
+      {/* DrillDownView rendered here so it sits inside this relative container */}
+      {drillDown && (
+        <DrillDownView
+          {...drillDown}
+          onClose={() => setDrillDown(null)}
+        />
+      )}
+
       <Header
         title="Dashboard"
         right={
@@ -640,7 +637,7 @@ export function DashboardPage() {
         ) : mainTab === 'accounts' ? (
           <AccountsTab currency={defaultCurrency} />
         ) : (
-          <StatsTab currency={defaultCurrency} />
+          <StatsTab currency={defaultCurrency} onDrillDown={setDrillDown} />
         )}
       </div>
 

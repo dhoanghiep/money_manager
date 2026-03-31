@@ -13,14 +13,13 @@ import { PeriodSelector } from '../summary/StatCard.jsx'
 import { TransactionList } from '../transactions/TransactionList.jsx'
 import { PageSpinner } from '../ui/Spinner.jsx'
 
-// Generate N period ranges going back from today
-function getLastNPeriods(period, n) {
+// Build N period ranges ending at refDate (oldest first)
+function buildPeriods(period, n, refDate) {
   const ranges = []
-  let d = new Date()
-  for (let i = n - 1; i >= 0; i--) {
-    let ref = d
-    for (let j = 0; j < i; j++) ref = navigatePeriod(period, ref, -1)
-    ranges.push(getPeriodRange(period, ref))
+  let d = refDate
+  for (let i = 0; i < n; i++) {
+    ranges.unshift(getPeriodRange(period, d))
+    d = navigatePeriod(period, d, -1)
   }
   return ranges
 }
@@ -33,60 +32,74 @@ function periodLabel(period, range) {
   return String(d.getFullYear())
 }
 
+function navLabel(period, refDate) {
+  if (period === 'week')    return formatWeekLabel(refDate)
+  if (period === 'month')   return formatMonthYear(refDate)
+  if (period === 'quarter') return `Q${Math.ceil((refDate.getMonth() + 1) / 3)} ${refDate.getFullYear()}`
+  return String(refDate.getFullYear())
+}
+
 function kFmt(v) {
   if (Math.abs(v) >= 1000) return `$${(v / 1000).toFixed(1)}k`
   return `$${v.toFixed(0)}`
 }
 
+// DrillDownView is rendered via absolute positioning inside DashboardPage's relative container
 export function DrillDownView({ filter, label, icon, color, txType, initPeriod = 'month', onClose }) {
   const { accounts } = useApp()
   const { defaultCurrency: currency } = useCurrency()
 
-  const [period, setPeriod]   = useState(initPeriod)
+  const [period, setPeriod]     = useState(initPeriod)
+  const [refDate, setRefDate]   = useState(new Date()) // selected period endpoint
   const [nPeriods, setNPeriods] = useState(10)
   const [transactions, setTransactions] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]   = useState(true)
 
   const isAccount = filter.mode === 'account' || filter.mode === 'subaccount'
 
-  // Build period ranges
-  const periods = useMemo(() => getLastNPeriods(period, nPeriods), [period, nPeriods])
-  const fullStart = periods[0]?.start
-  const fullEnd   = periods[periods.length - 1]?.end
+  // Selected period range
+  const selectedRange = useMemo(() => getPeriodRange(period, refDate), [period, refDate])
 
-  // Fetch transactions: accounts need all-time for running balance; categories need range only
+  // N periods ending at refDate (for chart)
+  const periods = useMemo(() => buildPeriods(period, nPeriods, refDate), [period, nPeriods, refDate])
+  const chartStart = periods[0]?.start
+  const chartEnd   = periods[periods.length - 1]?.end   // = selectedRange.end
+
+  // Fetch: accounts need all history for running balance; categories only need chart range
   useEffect(() => {
     setLoading(true)
-    const startDate = isAccount ? undefined : fullStart
-    const endDate   = isAccount ? undefined : fullEnd
-    api.getTransactions(startDate, endDate)
+    const start = isAccount ? undefined : chartStart
+    const end   = isAccount ? undefined : chartEnd
+    api.getTransactions(start, end)
       .then(res => setTransactions(res.data || []))
       .catch(() => setTransactions([]))
       .finally(() => setLoading(false))
-  }, [fullStart, fullEnd, isAccount])
+  }, [chartStart, chartEnd, isAccount])
 
-  // Filter transactions to the selected category/account
+  // Filter transactions to this category/account
   const filtered = useMemo(() => transactions.filter(t => {
-    if (filter.accountId    && t.accountId    !== filter.accountId)    return false
-    if (filter.subAccountId && (t.subAccountId || '') !== filter.subAccountId) return false
-    if (filter.categoryId   && t.categoryId   !== filter.categoryId)   return false
+    if (filter.accountId     && t.accountId    !== filter.accountId)    return false
+    if (filter.subAccountId  && (t.subAccountId || '') !== filter.subAccountId)  return false
+    if (filter.categoryId    && t.categoryId   !== filter.categoryId)   return false
     if (filter.subCategoryId && (t.subCategoryId || '') !== filter.subCategoryId) return false
     return true
   }), [transactions, filter])
 
-  // Transactions inside the visible period range (for list + total)
-  const visibleTxns = useMemo(() => filtered.filter(t => t.date >= fullStart && t.date <= fullEnd), [filtered, fullStart, fullEnd])
+  // Transactions for the selected period only (shown in list + top card)
+  const selectedTxns = useMemo(
+    () => filtered.filter(t => t.date >= selectedRange.start && t.date <= selectedRange.end),
+    [filtered, selectedRange]
+  )
 
-  // Chart data per period
+  // Chart data: N periods ending at refDate
   const chartData = useMemo(() => {
     if (isAccount) {
-      // Running balance for account
       const acc    = accounts.find(a => a.id === filter.accountId)
       let balance  = Number(acc?.initialBalance) || 0
-      // Add everything before the first visible period
-      const before = filtered.filter(t => t.date < fullStart)
-      balance += sumIncome(before) - sumExpense(before) + sumTransferBalance(before)
-
+      // Accumulate everything before the chart window
+      filtered.filter(t => t.date < chartStart).forEach(t => {
+        balance += sumIncome([t]) - sumExpense([t]) + sumTransferBalance([t])
+      })
       return periods.map(p => {
         const txns = filtered.filter(t => t.date >= p.start && t.date <= p.end)
         balance += sumIncome(txns) - sumExpense(txns) + sumTransferBalance(txns)
@@ -102,44 +115,67 @@ export function DrillDownView({ filter, label, icon, color, txType, initPeriod =
         expense: +sumExpense(txns).toFixed(2),
       }
     })
-  }, [periods, filtered, period, isAccount, accounts, filter, fullStart])
+  }, [periods, filtered, period, isAccount, accounts, filter, chartStart])
 
-  const total = useMemo(() => {
+  // Metric for the selected period (shown in the total card)
+  const selectedMetric = useMemo(() => {
     if (isAccount) {
-      const acc = accounts.find(a => a.id === filter.accountId)
-      const base = Number(acc?.initialBalance) || 0
-      return base + sumIncome(filtered) - sumExpense(filtered) + sumTransferBalance(filtered)
+      // Balance at end of selected period = last point in chartData
+      return chartData[chartData.length - 1]?.balance ?? 0
     }
-    return txType === 'expense' ? sumExpense(visibleTxns) : sumIncome(visibleTxns)
-  }, [filtered, visibleTxns, isAccount, txType, accounts, filter])
+    return txType === 'expense' ? sumExpense(selectedTxns) : sumIncome(selectedTxns)
+  }, [chartData, isAccount, txType, selectedTxns])
+
+  const metricLabel = isAccount
+    ? `Balance · ${navLabel(period, refDate)}`
+    : txType === 'expense'
+    ? `Expense · ${navLabel(period, refDate)}`
+    : `Income · ${navLabel(period, refDate)}`
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-50 dark:bg-gray-950 flex flex-col overflow-hidden">
+    // absolute inset-0 positions within DashboardPage's relative container → respects max-width
+    <div className="absolute inset-0 z-50 bg-gray-50 dark:bg-gray-950 flex flex-col overflow-hidden">
 
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
         <button
           onClick={onClose}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition text-lg"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition text-xl"
         >
           ←
         </button>
-        <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm" style={{ backgroundColor: color + '22' }}>
+        <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0" style={{ backgroundColor: color + '22' }}>
           {icon}
         </div>
         <span className="font-bold text-gray-900 dark:text-white truncate flex-1">{label}</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto pb-20">
 
-        {/* Period selector */}
-        <div className="px-4 pt-3 pb-1 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
-          <PeriodSelector period={period} onChange={setPeriod} />
+        {/* Controls bar */}
+        <div className="px-4 pt-3 pb-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex flex-col gap-2">
+          {/* Period type (Week/Month/Quarter/Year) */}
+          <PeriodSelector period={period} onChange={p => { setPeriod(p); setRefDate(new Date()) }} />
 
-          {/* N periods control */}
-          <div className="flex items-center justify-between mt-2 pb-2">
-            <span className="text-xs text-gray-500 dark:text-gray-400">Show last</span>
-            <div className="flex items-center gap-2">
+          {/* Period navigator — like StatsTab */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setRefDate(d => navigatePeriod(period, d, -1))}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition text-lg"
+            >‹</button>
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              {navLabel(period, refDate)}
+            </span>
+            <button
+              onClick={() => setRefDate(d => navigatePeriod(period, d, 1))}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition text-lg"
+            >›</button>
+          </div>
+
+          {/* N periods selector */}
+          <div className="flex items-center justify-between pb-1">
+            <span className="text-xs text-gray-500 dark:text-gray-400">Chart history</span>
+            <div className="flex items-center gap-1.5">
               {[5, 10, 20].map(n => (
                 <button
                   key={n}
@@ -153,31 +189,28 @@ export function DrillDownView({ filter, label, icon, color, txType, initPeriod =
                   {n}
                 </button>
               ))}
-              <span className="text-xs text-gray-500 dark:text-gray-400">{period}s</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">{period}s</span>
             </div>
           </div>
         </div>
 
         {loading ? <PageSpinner /> : (
           <>
-            {/* Total card */}
+            {/* Total card for selected period */}
             <div className="mx-4 mt-4 mb-3 p-4 bg-white dark:bg-gray-900 rounded-2xl shadow-sm">
-              <div className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">
-                {isAccount ? 'Current Balance' : txType === 'expense' ? 'Total Expense' : 'Total Income'}
-              </div>
+              <div className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">{metricLabel}</div>
               <div className={`text-2xl font-bold ${
                 isAccount
-                  ? total >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-500'
+                  ? selectedMetric >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-500 dark:text-red-400'
                   : txType === 'expense'
                   ? 'text-red-500 dark:text-red-400'
                   : 'text-green-600 dark:text-green-400'
               }`}>
-                {isAccount && total >= 0 ? '' : isAccount ? '-' : ''}
-                {formatCurrency(Math.abs(total), currency)}
+                {formatCurrency(Math.abs(selectedMetric), currency)}
               </div>
             </div>
 
-            {/* Line chart */}
+            {/* Line chart over N periods */}
             <div className="mx-4 mb-4 bg-white dark:bg-gray-900 rounded-2xl shadow-sm p-3">
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: -10 }}>
@@ -201,35 +234,17 @@ export function DrillDownView({ filter, label, icon, color, txType, initPeriod =
                     contentStyle={{ fontSize: 12, borderRadius: 10, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
                   />
                   {isAccount ? (
-                    <Line
-                      type="monotone"
-                      dataKey="balance"
-                      name="Balance"
-                      stroke={color || '#6366f1'}
-                      strokeWidth={2}
-                      dot={{ r: 3, fill: color || '#6366f1' }}
-                      activeDot={{ r: 5 }}
-                    />
+                    <Line type="monotone" dataKey="balance" name="Balance"
+                      stroke={color || '#6366f1'} strokeWidth={2.5}
+                      dot={{ r: 3, fill: color || '#6366f1' }} activeDot={{ r: 5 }} />
                   ) : (
                     <>
-                      <Line
-                        type="monotone"
-                        dataKey="income"
-                        name="Income"
-                        stroke="#22c55e"
-                        strokeWidth={2}
-                        dot={{ r: 3, fill: '#22c55e' }}
-                        activeDot={{ r: 5 }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="expense"
-                        name="Expense"
-                        stroke="#ef4444"
-                        strokeWidth={2}
-                        dot={{ r: 3, fill: '#ef4444' }}
-                        activeDot={{ r: 5 }}
-                      />
+                      <Line type="monotone" dataKey="income" name="Income"
+                        stroke="#22c55e" strokeWidth={2}
+                        dot={{ r: 3, fill: '#22c55e' }} activeDot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="expense" name="Expense"
+                        stroke="#ef4444" strokeWidth={2}
+                        dot={{ r: 3, fill: '#ef4444' }} activeDot={{ r: 5 }} />
                     </>
                   )}
                   {!isAccount && <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />}
@@ -237,12 +252,12 @@ export function DrillDownView({ filter, label, icon, color, txType, initPeriod =
               </ResponsiveContainer>
             </div>
 
-            {/* Transactions for the visible range */}
+            {/* Transactions for the selected period */}
             <div className="mx-4 mb-4 bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden">
               <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                Transactions
+                {navLabel(period, refDate)} — {selectedTxns.length} transactions
               </div>
-              <TransactionList transactions={visibleTxns} showDateHeaders transferNeutral />
+              <TransactionList transactions={selectedTxns} showDateHeaders transferNeutral />
             </div>
           </>
         )}
