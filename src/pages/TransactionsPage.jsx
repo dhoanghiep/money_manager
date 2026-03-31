@@ -43,8 +43,8 @@ export function TransactionsPage() {
     setLoading(true)
     setError('')
     try {
-      const data = await api.getTransactions(start, end)
-      setTransactions(Array.isArray(data) ? data : [])
+      const res = await api.getTransactions(start, end)
+      setTransactions(res.data || [])
     } catch (err) {
       setError(err.message)
       setTransactions([])
