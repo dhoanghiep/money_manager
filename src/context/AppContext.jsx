@@ -92,8 +92,17 @@ function reducer(state, action) {
         }),
       }
     }
-    case 'ADD_CATEGORY':
-      return { ...state, categories: [...state.categories, action.payload] }
+    case 'ADD_CATEGORY': {
+      const newCat = action.payload
+      // Keep "Other" last at the same level (top-level or same parentId)
+      const otherIdx = state.categories.findIndex(
+        c => c.name === 'Other' && (c.parentId || null) === (newCat.parentId || null)
+      )
+      if (otherIdx === -1) return { ...state, categories: [...state.categories, newCat] }
+      const cats = [...state.categories]
+      cats.splice(otherIdx, 0, newCat)
+      return { ...state, categories: cats }
+    }
     case 'UPDATE_CATEGORY':
       return { ...state, categories: state.categories.map(c => c.id === action.payload.id ? action.payload : c) }
     case 'REMOVE_CATEGORY':
