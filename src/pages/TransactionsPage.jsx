@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useApp } from '../context/AppContext.jsx'
 import { Header } from '../components/layout/Header.jsx'
 import { TransactionList } from '../components/transactions/TransactionList.jsx'
@@ -8,12 +8,61 @@ import { TransactionForm } from '../components/transactions/TransactionForm.jsx'
 import { PageSpinner } from '../components/ui/Spinner.jsx'
 import { formatCurrency } from '../utils/currencyFormatter.js'
 import { sumIncome, sumExpense } from '../utils/aggregations.js'
+import { api } from '../api/client.js'
+import { getMonthRange, toDateString } from '../utils/dateHelpers.js'
 
 export function TransactionsPage() {
-  const { transactions, loading } = useApp()
+  const { categories, accounts } = useApp() // Only for filters, not for transactions
   const [addOpen, setAddOpen] = useState(false)
   const [filters, setFilters] = useState({ type: '', categoryId: '', accountId: '' })
   const [search, setSearch] = useState('')
+
+  // Date range state (default to current month)
+  const today = new Date()
+  const monthRange = getMonthRange(today)
+  const [startDate, setStartDate] = useState(monthRange.start)
+  const [endDate, setEndDate] = useState(monthRange.end)
+
+  // Transactions loaded from API
+  const [transactions, setTransactions] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const prevAddOpen = useRef(addOpen)
+
+  // Fetch transactions when date range changes
+  useEffect(() => {
+    async function loadTransactions() {
+      setLoading(true)
+      setError('')
+      try {
+        const data = await api.getTransactions(startDate, endDate)
+        setTransactions(data || [])
+      } catch (err) {
+        setError(err.message)
+        setTransactions([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadTransactions()
+  }, [startDate, endDate])
+
+  // Refetch when add modal closes (user may have added a transaction)
+  useEffect(() => {
+    if (prevAddOpen.current && !addOpen) {
+      // Modal just closed - refetch transactions
+      async function refetch() {
+        try {
+          const data = await api.getTransactions(startDate, endDate)
+          setTransactions(data || [])
+        } catch (err) {
+          console.error('Failed to refetch transactions:', err)
+        }
+      }
+      refetch()
+    }
+    prevAddOpen.current = addOpen
+  }, [addOpen, startDate, endDate])
 
   const filtered = useMemo(() => {
     return transactions.filter(t => {
@@ -42,6 +91,26 @@ export function TransactionsPage() {
         }
       />
 
+      {/* Date range filter */}
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/30">
+        <div className="flex gap-2 items-center text-sm">
+          <label className="text-gray-600 dark:text-gray-400 font-medium">Date range:</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={e => setStartDate(e.target.value)}
+            className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <span className="text-gray-400">→</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={e => setEndDate(e.target.value)}
+            className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+      </div>
+
       {/* Search */}
       <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-800">
         <input
@@ -64,7 +133,12 @@ export function TransactionsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto pb-20">
-        {loading.transactions ? (
+        {error && (
+          <div className="m-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-400">
+            {error}
+          </div>
+        )}
+        {loading ? (
           <PageSpinner />
         ) : (
           <TransactionList transactions={filtered} showDateHeaders transferNeutral />
