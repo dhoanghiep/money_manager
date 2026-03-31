@@ -17,6 +17,7 @@ import {
   groupByCategory, groupBySubCategory, groupByAccount,
 } from '../utils/aggregations.js'
 import { formatCurrency } from '../utils/currencyFormatter.js'
+import { DrillDownView } from '../components/stats/DrillDownView.jsx'
 
 // ── Group mode toggle ──────────────────────────────────────────
 
@@ -28,10 +29,13 @@ const GROUP_MODES = [
 
 // ── Group list item ────────────────────────────────────────────
 
-function GroupItem({ item, total, currency }) {
+function GroupItem({ item, total, currency, onClick }) {
   const pct = total > 0 ? (item.total / total) * 100 : 0
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
+    <div
+      className={`flex items-center gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0 ${onClick ? 'cursor-pointer active:bg-gray-50 dark:active:bg-gray-800/50' : ''}`}
+      onClick={onClick}
+    >
       <div
         className="w-9 h-9 rounded-full flex items-center justify-center text-base flex-shrink-0"
         style={{ backgroundColor: item.color + '22' }}
@@ -55,6 +59,7 @@ function GroupItem({ item, total, currency }) {
       >
         {pct.toFixed(1)}%
       </div>
+      {onClick && <span className="text-gray-300 dark:text-gray-600 text-sm flex-shrink-0">›</span>}
     </div>
   )
 }
@@ -322,6 +327,7 @@ function StatsTab({ currency }) {
   const [groupMode, setGroupMode] = useState('category')
   const [periodTxns, setPeriodTxns] = useState([])
   const [loading, setLoading] = useState(false)
+  const [drillDown, setDrillDown] = useState(null) // { filter, label, icon, color }
 
   const range = useMemo(() => getPeriodRange(period, refDate), [period, refDate])
 
@@ -408,7 +414,24 @@ function StatsTab({ currency }) {
     return String(refDate.getFullYear())
   }
 
+  // ── Drill-down helper ────────────────────────────────────────
+  function openDrillDown(filter, label, icon, color) {
+    setDrillDown({ filter, label, icon, color })
+  }
+
   return (
+    <>
+    {drillDown && (
+      <DrillDownView
+        filter={drillDown.filter}
+        label={drillDown.label}
+        icon={drillDown.icon}
+        color={drillDown.color}
+        txType={txType}
+        initPeriod={period}
+        onClose={() => setDrillDown(null)}
+      />
+    )}
     <div className="flex flex-col gap-0">
       {/* Period bar */}
       <div className="px-4 pt-3 pb-2 flex flex-col gap-2">
@@ -500,11 +523,21 @@ function StatsTab({ currency }) {
                       item={{ name: group.name, color: group.color, icon: group.icon, total: group.total }}
                       total={groupTotal}
                       currency={currency}
+                      onClick={() => openDrillDown(
+                        { mode: 'category', categoryId: group.key },
+                        group.name, group.icon, group.color
+                      )}
                     />
                   ) : (
                     <>
-                      {/* Parent category header (has children below) */}
-                      <div className="flex items-center justify-between py-2.5 border-b border-gray-100 dark:border-gray-800">
+                      {/* Parent category header — clickable */}
+                      <div
+                        className="flex items-center justify-between py-2.5 border-b border-gray-100 dark:border-gray-800 cursor-pointer active:bg-gray-50 dark:active:bg-gray-800/50"
+                        onClick={() => openDrillDown(
+                          { mode: 'category', categoryId: group.key },
+                          group.name, group.icon, group.color
+                        )}
+                      >
                         <div className="flex items-center gap-2">
                           <div
                             className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0"
@@ -514,14 +547,25 @@ function StatsTab({ currency }) {
                           </div>
                           <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{group.name}</span>
                         </div>
-                        <span className="text-sm font-bold text-gray-800 dark:text-gray-100">
-                          {formatCurrency(group.total, currency)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                            {formatCurrency(group.total, currency)}
+                          </span>
+                          <span className="text-gray-300 dark:text-gray-600 text-sm">›</span>
+                        </div>
                       </div>
-                      {/* Sub-category items — indented */}
+                      {/* Sub-category items — indented, each clickable */}
                       {group.subs.map((item, i) => (
                         <div key={i} className="pl-3">
-                          <GroupItem item={item} total={groupTotal} currency={currency} />
+                          <GroupItem
+                            item={item}
+                            total={groupTotal}
+                            currency={currency}
+                            onClick={() => openDrillDown(
+                              { mode: 'subcategory', categoryId: item.categoryId, subCategoryId: item.subCategoryId || '' },
+                              `${group.name} › ${item.name}`, item.icon, item.color
+                            )}
+                          />
                         </div>
                       ))}
                     </>
@@ -530,13 +574,25 @@ function StatsTab({ currency }) {
               ))
             ) : (
               groupData.map((item, i) => (
-                <GroupItem key={i} item={item} total={groupTotal} currency={currency} />
+                <GroupItem
+                  key={i}
+                  item={item}
+                  total={groupTotal}
+                  currency={currency}
+                  onClick={() => openDrillDown(
+                    groupMode === 'account'
+                      ? { mode: 'account', accountId: item.accountId }
+                      : { mode: 'category', categoryId: item.categoryId },
+                    item.name, item.icon, item.color
+                  )}
+                />
               ))
             )}
           </div>
         </>
       )}
     </div>
+    </>
   )
 }
 
