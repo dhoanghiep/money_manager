@@ -20,7 +20,7 @@ const FREQUENCIES = [
 // ── Schedule Form ─────────────────────────────────────────────
 
 function ScheduleForm({ schedule, onClose }) {
-  const { categories, accounts, addSchedule, editSchedule } = useApp()
+  const { categories, topLevelAccounts, subAccountsOf, addSchedule, editSchedule } = useApp()
   const toast = useToast()
   const isEdit = !!schedule?.id
 
@@ -30,9 +30,10 @@ function ScheduleForm({ schedule, onClose }) {
   const [categoryId, setCategoryId] = useState(schedule?.categoryId || '')
   const [accountId, setAccountId] = useState(() => {
     if (schedule?.accountId) return schedule.accountId
-    const bank = accounts.find(a => a.type === 'bank') ?? accounts[0]
+    const bank = topLevelAccounts.find(a => a.type === 'bank') ?? topLevelAccounts[0]
     return bank?.id || ''
   })
+  const [subAccountId, setSubAccountId] = useState(schedule?.subAccountId || '')
   const [note, setNote] = useState(schedule?.note || '')
   const [frequency, setFrequency] = useState(schedule?.frequency || 'monthly')
   const [startDate, setStartDate] = useState(schedule?.startDate || toDateString(today()))
@@ -40,6 +41,10 @@ function ScheduleForm({ schedule, onClose }) {
   const [loading, setLoading] = useState(false)
 
   const filteredCategories = categories.filter(c => c.type === type || c.type === 'both')
+  const availableSubAccounts = accountId ? subAccountsOf(accountId) : []
+
+  // Reset sub-account when main account changes
+  useEffect(() => { setSubAccountId('') }, [accountId])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -52,6 +57,7 @@ function ScheduleForm({ schedule, onClose }) {
         amount: Number(amount),
         categoryId: categoryId || '',
         accountId: accountId || '',
+        subAccountId: subAccountId || '',
         note: note.trim(),
         frequency,
         startDate,
@@ -117,8 +123,17 @@ function ScheduleForm({ schedule, onClose }) {
 
       <Select label="Account" value={accountId} onChange={e => setAccountId(e.target.value)}>
         <option value="">— No account —</option>
-        {accounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+        {topLevelAccounts.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
       </Select>
+
+      {availableSubAccounts.length > 0 && (
+        <Select label="Sub-account" value={subAccountId} onChange={e => setSubAccountId(e.target.value)}>
+          <option value="">General</option>
+          {availableSubAccounts.map(a => (
+            <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
+          ))}
+        </Select>
+      )}
 
       <Textarea label="Note (optional)" placeholder="Add a note…" value={note} onChange={e => setNote(e.target.value)} />
 
@@ -197,7 +212,7 @@ const FREQ_LABEL = { daily: 'Daily', weekly: 'Weekly', biweekly: 'Biweekly', mon
 const FREQ_ICON  = { daily: '📆', weekly: '🗓', biweekly: '🗓', monthly: '📅', yearly: '🗃' }
 
 export function ScheduleManager() {
-  const { schedules, categories, accounts, removeSchedule, editSchedule } = useApp()
+  const { schedules, categories, accounts, subAccountsOf, removeSchedule, editSchedule } = useApp()
   const toast = useToast()
   const [formOpen, setFormOpen]       = useState(false)
   const [editTarget, setEditTarget]   = useState(null)
@@ -256,8 +271,9 @@ export function ScheduleManager() {
               {label}
             </div>
             {list.map(sch => {
-              const cat = categories.find(c => c.id === sch.categoryId)
-              const acc = accounts.find(a => a.id === sch.accountId)
+              const cat    = categories.find(c => c.id === sch.categoryId)
+              const acc    = accounts.find(a => a.id === sch.accountId)
+              const subAcc = sch.subAccountId ? subAccountsOf(sch.accountId).find(a => a.id === sch.subAccountId) : null
               const isIncome = sch.type === 'income'
 
               return (
@@ -278,7 +294,7 @@ export function ScheduleManager() {
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-400 dark:text-gray-500">
                       <span>{FREQ_LABEL[sch.frequency]}</span>
                       {cat && <span>· {cat.icon} {cat.name}</span>}
-                      {acc && <span>· {acc.icon} {acc.name}</span>}
+                      {acc && <span>· {acc.icon} {acc.name}{subAcc ? ` › ${subAcc.name}` : ''}</span>}
                       {sch.nextDate && (
                         <span className="ml-auto text-indigo-500 dark:text-indigo-400 font-medium">
                           Next: {formatDisplay(sch.nextDate, 'MMM d')}
