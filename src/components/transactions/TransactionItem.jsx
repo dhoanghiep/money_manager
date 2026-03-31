@@ -7,8 +7,30 @@ import { TransactionForm } from './TransactionForm.jsx'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
 import { formatDisplay } from '../../utils/dateHelpers.js'
 
-export function TransactionItem({ transaction, showDate = false }) {
+export function TransactionItem({ transaction, showDate = false, transferNeutral = false }) {
   const { categories, accounts, transactions, removeTransaction, removeTransfer } = useApp()
+
+  // Build a merged "transfer edit object" combining both legs, for the edit form.
+  // We look up the other leg so we can pre-fill both sub-accounts.
+  function buildTransferEditObj() {
+    const other = otherLeg
+    const outLeg = transferOut ? transaction : other
+    const inLeg  = transferOut ? other : transaction
+    return {
+      id:               transaction.id,
+      type:             'transfer',
+      transferId:       transaction.transferId,
+      accountId:        fromAccountId  || '',   // from account
+      toAccountId:      toAccountId    || '',
+      fromSubAccountId: outLeg?.subAccountId || '',
+      toSubAccountId:   inLeg?.subAccountId  || '',
+      amount:           transaction.amount,
+      date:             transaction.date,
+      note:             transaction.note,
+      currency:         transaction.currency,
+      exchangeRate:     transaction.exchangeRate,
+    }
+  }
   const { defaultCurrency } = useCurrency()
   const toast = useToast()
   const [editOpen, setEditOpen] = useState(false)
@@ -34,6 +56,8 @@ export function TransactionItem({ transaction, showDate = false }) {
   const counterpartId = isTransfer ? (transferOut ? toAccountId : fromAccountId) : null
   const counterpart = accounts.find(a => a.id === counterpartId)
   const directionLabel = isTransfer ? (fromAccountId ? (transferOut ? 'To' : 'From') : '⇄') : null
+  const fromAccount = accounts.find(a => a.id === fromAccountId)
+  const toAccount   = accounts.find(a => a.id === toAccountId)
   const isIncome = transaction.type === 'income'
 
   // Hide delete for transactions older than 2 days
@@ -70,7 +94,7 @@ export function TransactionItem({ transaction, showDate = false }) {
     <>
       <div
         className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 active:bg-gray-100 dark:active:bg-gray-800 transition cursor-pointer"
-        onClick={() => !isTransfer && setEditOpen(true)}
+        onClick={() => setEditOpen(true)}
       >
         {/* Icon */}
         <div
@@ -85,12 +109,20 @@ export function TransactionItem({ transaction, showDate = false }) {
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
               {isTransfer ? (
-                <>
-                  <span className="text-gray-400 dark:text-gray-500 font-normal text-xs">
-                    {directionLabel}
-                  </span>
-                  {' '}{counterpart ? `${counterpart.icon} ${counterpart.name}` : '?'}
-                </>
+                isTransfer && transferNeutral ? (
+                  <>
+                    {fromAccount ? `${fromAccount.icon} ${fromAccount.name}` : '?'}
+                    <span className="text-gray-400 dark:text-gray-500 font-normal"> → </span>
+                    {toAccount ? `${toAccount.icon} ${toAccount.name}` : '?'}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-gray-400 dark:text-gray-500 font-normal text-xs">
+                      {directionLabel}
+                    </span>
+                    {' '}{counterpart ? `${counterpart.icon} ${counterpart.name}` : '?'}
+                  </>
+                )
               ) : (
                 <>
                   {category ? category.name : 'Uncategorized'}
@@ -104,15 +136,19 @@ export function TransactionItem({ transaction, showDate = false }) {
             </span>
             <div className="flex flex-col items-end flex-shrink-0">
               <span className={`font-semibold text-sm ${
-                isTransfer
-                  ? transferOut
-                    ? 'text-red-500 dark:text-red-400'
-                    : 'text-green-600 dark:text-green-400'
-                  : isIncome
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-red-500 dark:text-red-400'
+                isTransfer && transferNeutral
+                  ? 'text-gray-900 dark:text-gray-100'
+                  : isTransfer
+                    ? transferOut
+                      ? 'text-red-500 dark:text-red-400'
+                      : 'text-green-600 dark:text-green-400'
+                    : isIncome
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-500 dark:text-red-400'
               }`}>
-                {isTransfer ? (transferOut ? '-' : '+') : (isIncome ? '+' : '-')}
+                {!(isTransfer && transferNeutral) && (
+                  isTransfer ? (transferOut ? '-' : '+') : (isIncome ? '+' : '-')
+                )}
                 {isForeign
                   ? formatCurrency(transaction.amount, txCurrency)
                   : formatCurrency(transaction.amount, defaultCurrency)
@@ -126,11 +162,11 @@ export function TransactionItem({ transaction, showDate = false }) {
             </div>
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            {isTransfer ? (
+            {isTransfer && !transferNeutral ? (
               <span className="text-xs text-gray-400 dark:text-gray-500">
                 {account?.icon} {account?.name} {transferOut ? '→' : '←'} {counterpart?.icon} {counterpart?.name}
               </span>
-            ) : (
+            ) : !isTransfer ? (
               account && (
                 <span className="text-xs text-gray-400 dark:text-gray-500">
                   {account.icon} {account.name}
@@ -139,7 +175,7 @@ export function TransactionItem({ transaction, showDate = false }) {
                   )}
                 </span>
               )
-            )}
+            ) : null}
             {transaction.note && (
               <span className="text-xs text-gray-400 dark:text-gray-500 truncate">
                 {account ? '· ' : ''}{transaction.note}
@@ -166,8 +202,11 @@ export function TransactionItem({ transaction, showDate = false }) {
       </div>
 
       {/* Edit modal */}
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Transaction">
-        <TransactionForm transaction={transaction} onClose={() => setEditOpen(false)} />
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={isTransfer ? 'Edit Transfer' : 'Edit Transaction'}>
+        <TransactionForm
+          transaction={isTransfer ? buildTransferEditObj() : transaction}
+          onClose={() => setEditOpen(false)}
+        />
       </Modal>
 
       {/* Confirm delete */}

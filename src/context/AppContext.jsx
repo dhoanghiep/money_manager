@@ -51,10 +51,41 @@ function reducer(state, action) {
           : [action.payload, ...state.transactions],
       }
     }
+    case 'UPDATE_TRANSACTION': {
+      return {
+        ...state,
+        transactions: state.transactions.map(t =>
+          t.id === action.payload.id ? { ...t, ...action.payload.data } : t
+        ),
+      }
+    }
     case 'REMOVE_TRANSACTION':
       return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) }
     case 'REMOVE_TRANSFER':
       return { ...state, transactions: state.transactions.filter(t => t.transferId !== action.payload) }
+    case 'UPDATE_TRANSFER': {
+      const { transferId, data } = action.payload
+      return {
+        ...state,
+        transactions: state.transactions.map(t => {
+          if (t.transferId !== transferId) return t
+          const isOutflow = t.fromAccountId && t.accountId === t.fromAccountId
+          return {
+            ...t,
+            date:          data.date          ?? t.date,
+            amount:        data.amount        ?? t.amount,
+            note:          data.note          ?? t.note,
+            currency:      data.currency      ?? t.currency,
+            exchangeRate:  data.exchangeRate  ?? t.exchangeRate,
+            fromAccountId: data.fromAccountId ?? t.fromAccountId,
+            toAccountId:   data.toAccountId   ?? t.toAccountId,
+            accountId:     isOutflow ? (data.fromAccountId ?? t.accountId) : (data.toAccountId ?? t.accountId),
+            subAccountId:  isOutflow ? (data.fromSubAccountId ?? t.subAccountId) : (data.toSubAccountId ?? t.subAccountId),
+            updatedAt:     new Date().toISOString(),
+          }
+        }),
+      }
+    }
     case 'ADD_CATEGORY':
       return { ...state, categories: [...state.categories, action.payload] }
     case 'UPDATE_CATEGORY':
@@ -175,9 +206,7 @@ export function AppProvider({ children }) {
 
   async function editTransaction(id, data) {
     await api.updateTransaction(id, data)
-    const updated = { ...state.transactions.find(t => t.id === id), ...data, updatedAt: new Date().toISOString() }
-    dispatch({ type: 'UPSERT_TRANSACTION', payload: updated })
-    return updated
+    dispatch({ type: 'UPDATE_TRANSACTION', payload: { id, data: { ...data, updatedAt: new Date().toISOString() } } })
   }
 
   async function removeTransaction(id) {
@@ -195,6 +224,11 @@ export function AppProvider({ children }) {
     dispatch({ type: 'UPSERT_TRANSACTION', payload: { ...base, id: res.idOut, accountId: data.fromAccountId, subAccountId: data.fromSubAccountId || '' } })
     dispatch({ type: 'UPSERT_TRANSACTION', payload: { ...base, id: res.idIn,  accountId: data.toAccountId,  subAccountId: data.toSubAccountId   || '' } })
     return res
+  }
+
+  async function editTransfer(transferId, data) {
+    await api.updateTransfer(transferId, data)
+    dispatch({ type: 'UPDATE_TRANSFER', payload: { transferId, data } })
   }
 
   async function removeTransfer(transferId) {
@@ -293,6 +327,7 @@ export function AppProvider({ children }) {
     editTransaction,
     removeTransaction,
     addTransfer,
+    editTransfer,
     removeTransfer,
     addCategory,
     editCategory,

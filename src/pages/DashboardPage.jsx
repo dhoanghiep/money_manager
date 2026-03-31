@@ -352,6 +352,55 @@ function StatsTab({ currency }) {
 
   const groupTotal = groupData.reduce((s, d) => s + d.total, 0)
 
+  // For sub-category mode: group items by parent category for hierarchical display
+  const subGrouped = useMemo(() => {
+    if (groupMode !== 'subcategory') return null
+    const parentMap = {}
+    groupData.forEach(item => {
+      const key = item.categoryId || '__uncategorized__'
+      if (!parentMap[key]) {
+        const cat = categories.find(c => c.id === key)
+        parentMap[key] = {
+          key,
+          name:  cat ? cat.name  : 'Uncategorized',
+          color: cat ? cat.color : '#6B7280',
+          icon:  cat ? cat.icon  : '📦',
+          total: 0,
+          subs:  [],
+        }
+      }
+      parentMap[key].total += item.total
+      // Strip the "Parent › " prefix so the list only shows the sub-category name
+      const subName = item.name.includes(' › ')
+        ? item.name.split(' › ').slice(1).join(' › ')
+        : item.name
+      parentMap[key].subs.push({ ...item, name: subName })
+    })
+    return Object.values(parentMap)
+      .sort((a, b) => b.total - a.total)
+      .map(g => {
+        const sorted = g.subs.sort((a, b) => b.total - a.total)
+        // Only show sub-items when there's at least one named sub-category.
+        // If every transaction in this category is "General" (unassigned),
+        // the parent header already conveys the total — no need for a child row.
+        const hasRealSubs = sorted.some(s => s.name !== 'General')
+        return { ...g, subs: hasRealSubs ? sorted : [] }
+      })
+  }, [groupMode, groupData, categories])
+
+  // Pie chart data: for sub-category mode, replace "Category › General"-only groups
+  // with the parent category item so the chart doesn't show redundant "General" slices.
+  const chartData = useMemo(() => {
+    if (!subGrouped) return groupData
+    return subGrouped.flatMap(group =>
+      group.subs.length === 0
+        // No real sub-categories: show as a plain parent-level slice (no parentName)
+        ? [{ name: group.name, color: group.color, icon: group.icon, total: group.total }]
+        // Real sub-categories: add parentName so PieLabel renders the two-line format
+        : group.subs.map(sub => ({ ...sub, parentName: group.name }))
+    )
+  }, [subGrouped, groupData])
+
   function pLabel() {
     if (period === 'week')    return formatWeekLabel(refDate)
     if (period === 'month')   return formatMonthYear(refDate)
@@ -413,7 +462,7 @@ function StatsTab({ currency }) {
 
             {/* Pie chart */}
             <div className="pt-2 pb-1">
-              <StatPieChart data={groupData} />
+              <StatPieChart data={chartData} />
             </div>
           </div>
 
@@ -441,6 +490,44 @@ function StatsTab({ currency }) {
                 <span className="text-3xl">📊</span>
                 <span className="text-sm">No {txType} data for this period</span>
               </div>
+            ) : subGrouped ? (
+              // Sub-category mode: grouped by parent category
+              subGrouped.map(group => (
+                <div key={group.key}>
+                  {group.subs.length === 0 ? (
+                    // No real sub-categories — render exactly like a regular GroupItem (with bar + %)
+                    <GroupItem
+                      item={{ name: group.name, color: group.color, icon: group.icon, total: group.total }}
+                      total={groupTotal}
+                      currency={currency}
+                    />
+                  ) : (
+                    <>
+                      {/* Parent category header (has children below) */}
+                      <div className="flex items-center justify-between py-2.5 border-b border-gray-100 dark:border-gray-800">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0"
+                            style={{ backgroundColor: group.color + '22' }}
+                          >
+                            {group.icon}
+                          </div>
+                          <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{group.name}</span>
+                        </div>
+                        <span className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                          {formatCurrency(group.total, currency)}
+                        </span>
+                      </div>
+                      {/* Sub-category items — indented */}
+                      {group.subs.map((item, i) => (
+                        <div key={i} className="pl-3">
+                          <GroupItem item={item} total={groupTotal} currency={currency} />
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              ))
             ) : (
               groupData.map((item, i) => (
                 <GroupItem key={i} item={item} total={groupTotal} currency={currency} />

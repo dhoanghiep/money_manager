@@ -63,6 +63,10 @@ export const api = {
     return request('POST', {}, { action: 'deleteTransfer', transferId })
   },
 
+  updateTransfer(transferId, data) {
+    return request('POST', {}, { action: 'updateTransfer', transferId, data })
+  },
+
   // ── Categories ────────────────────────────────────────────
   getCategories() {
     return request('GET', { action: 'getCategories' })

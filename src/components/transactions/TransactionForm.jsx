@@ -12,7 +12,7 @@ import { getDefaultAccountId, getDefaultSubAccountId } from '../accounts/Account
 import { getDefaultCategoryId, getDefaultSubCategoryId } from '../categories/CategoryManager.jsx'
 
 export function TransactionForm({ transaction, onClose }) {
-  const { transactions, categories, accounts, addTransaction, editTransaction, addTransfer, topLevelCategories, subCategoriesOf, topLevelAccounts, subAccountsOf } = useApp()
+  const { transactions, categories, accounts, addTransaction, editTransaction, addTransfer, editTransfer, topLevelCategories, subCategoriesOf, topLevelAccounts, subAccountsOf } = useApp()
   const { defaultCurrency, getRate, fetchSingleRate } = useCurrency()
   const toast = useToast()
   const isEdit = !!transaction?.id
@@ -26,8 +26,12 @@ export function TransactionForm({ transaction, onClose }) {
   const [subAccountId, setSubAccountId] = useState(transaction?.subAccountId || '')
   // Transfer-specific
   const [toAccountId, setToAccountId] = useState(transaction?.toAccountId || '')
-  const [fromSubAccountId, setFromSubAccountId] = useState('')
-  const [toSubAccountId, setToSubAccountId] = useState('')
+  const [fromSubAccountId, setFromSubAccountId] = useState(
+    transaction?.type === 'transfer' ? (transaction?.fromSubAccountId || '') : ''
+  )
+  const [toSubAccountId, setToSubAccountId] = useState(
+    transaction?.type === 'transfer' ? (transaction?.toSubAccountId || '') : ''
+  )
   const [currency, setCurrency] = useState(transaction?.currency || defaultCurrency)
   const [exchangeRate, setExchangeRate] = useState(
     transaction?.exchangeRate ? String(transaction.exchangeRate) : ''
@@ -159,7 +163,7 @@ export function TransactionForm({ transaction, onClose }) {
     setLoading(true)
     try {
       if (isTransfer) {
-        await addTransfer({
+        const transferData = {
           date,
           amount: Number(amount),
           fromAccountId: accountId,
@@ -169,8 +173,14 @@ export function TransactionForm({ transaction, onClose }) {
           note: note.trim(),
           currency: currency || defaultCurrency,
           exchangeRate: isForeign ? Number(exchangeRate) : 1,
-        })
-        toast.show({ message: 'Transfer recorded' })
+        }
+        if (isEdit) {
+          await editTransfer(transaction.transferId, transferData)
+          toast.show({ message: 'Transfer updated' })
+        } else {
+          await addTransfer(transferData)
+          toast.show({ message: 'Transfer recorded' })
+        }
       } else {
         const data = {
           type,

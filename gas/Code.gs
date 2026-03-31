@@ -114,6 +114,9 @@ function doPost(e) {
       case 'deleteTransfer':
         result = deleteTransfer(body.transferId);
         break;
+      case 'updateTransfer':
+        result = updateTransfer(body.transferId, data);
+        break;
       case 'setPreference':
         result = setPreference(data.key, data.value);
         break;
@@ -244,6 +247,49 @@ function deleteTransfer(transferId) {
   // Delete from bottom up so row numbers stay valid
   for (var i = rows.length - 1; i >= 1; i--) {
     if (rows[i][tCol] === transferId) sheet.deleteRow(i + 1);
+  }
+  return { ok: true };
+}
+
+// Updates both legs of a transfer (shared fields + per-leg accountId/subAccountId).
+function updateTransfer(transferId, data) {
+  const sheet = getSheet(SHEET_NAMES.TRANSACTIONS);
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  const tCol     = headers.indexOf('transferId');
+  const accCol   = headers.indexOf('accountId');
+  const fromCol  = headers.indexOf('fromAccountId');
+  if (tCol === -1) return { error: 'transferId column not found' };
+  const now = new Date().toISOString();
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][tCol]) !== String(transferId)) continue;
+    const rowNum = i + 1;
+    // Shared fields
+    if (data.date !== undefined)         sheet.getRange(rowNum, headers.indexOf('date') + 1).setValue(data.date);
+    if (data.amount !== undefined)       sheet.getRange(rowNum, headers.indexOf('amount') + 1).setValue(data.amount);
+    if (data.note !== undefined)         sheet.getRange(rowNum, headers.indexOf('note') + 1).setValue(data.note || '');
+    if (data.currency !== undefined && headers.indexOf('currency') !== -1)
+      sheet.getRange(rowNum, headers.indexOf('currency') + 1).setValue(data.currency || '');
+    if (data.exchangeRate !== undefined && headers.indexOf('exchangeRate') !== -1)
+      sheet.getRange(rowNum, headers.indexOf('exchangeRate') + 1).setValue(data.exchangeRate || 1);
+    // Update both legs' fromAccountId / toAccountId
+    if (data.fromAccountId !== undefined && fromCol !== -1)
+      sheet.getRange(rowNum, fromCol + 1).setValue(data.fromAccountId);
+    if (data.toAccountId !== undefined && headers.indexOf('toAccountId') !== -1)
+      sheet.getRange(rowNum, headers.indexOf('toAccountId') + 1).setValue(data.toAccountId);
+    // Per-leg: outflow has accountId === fromAccountId
+    const isOutflow = fromCol !== -1 && String(rows[i][accCol]) === String(rows[i][fromCol]);
+    if (isOutflow) {
+      if (data.fromAccountId !== undefined) sheet.getRange(rowNum, accCol + 1).setValue(data.fromAccountId);
+      if (data.fromSubAccountId !== undefined && headers.indexOf('subAccountId') !== -1)
+        sheet.getRange(rowNum, headers.indexOf('subAccountId') + 1).setValue(data.fromSubAccountId || '');
+    } else {
+      if (data.toAccountId !== undefined) sheet.getRange(rowNum, accCol + 1).setValue(data.toAccountId);
+      if (data.toSubAccountId !== undefined && headers.indexOf('subAccountId') !== -1)
+        sheet.getRange(rowNum, headers.indexOf('subAccountId') + 1).setValue(data.toSubAccountId || '');
+    }
+    sheet.getRange(rowNum, headers.indexOf('updatedAt') + 1).setValue(now);
   }
   return { ok: true };
 }

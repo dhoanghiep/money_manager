@@ -7,29 +7,55 @@ import { formatCurrency } from '../../utils/currencyFormatter.js'
 // ── Custom external pie label ──────────────────────────────────
 const RADIAN = Math.PI / 180
 
-function PieLabel({ cx, cy, midAngle, outerRadius, name, percent, fill }) {
+const trunc = (s, max) => s.length > max ? s.slice(0, max - 1) + '…' : s
+
+// parentName is set in chartData for sub-category slices.
+// Recharts doesn't always forward custom fields as direct props, so we read
+// from payload (the original data entry) which is always reliable.
+function PieLabel({ cx, cy, midAngle, outerRadius, name, percent, fill, payload }) {
   if (percent < 0.03) return null // hide tiny slices
-  const radius = outerRadius + 28
+
+  // payload.parentName is set only for sub-category slices
+  const parentName = payload?.parentName
+  const twoLine = !!parentName
+
+  const radius = outerRadius + (twoLine ? 36 : 28)
   const x = cx + radius * Math.cos(-midAngle * RADIAN)
   const y = cy + radius * Math.sin(-midAngle * RADIAN)
   const anchor = x > cx ? 'start' : 'end'
 
-  // Label line end point
+  // Label line
   const lineR = outerRadius + 6
-  const lx = cx + lineR * Math.cos(-midAngle * RADIAN)
-  const ly = cy + lineR * Math.sin(-midAngle * RADIAN)
+  const lx  = cx + lineR * Math.cos(-midAngle * RADIAN)
+  const ly  = cy + lineR * Math.sin(-midAngle * RADIAN)
   const lx2 = cx + (outerRadius + 20) * Math.cos(-midAngle * RADIAN)
   const ly2 = cy + (outerRadius + 20) * Math.sin(-midAngle * RADIAN)
 
   return (
     <g>
       <line x1={lx} y1={ly} x2={lx2} y2={ly2} stroke={fill} strokeWidth={1} />
-      <text x={x} y={y - 6} textAnchor={anchor} fill={fill} fontSize={10} fontWeight={600}>
-        {name.length > 12 ? name.slice(0, 11) + '…' : name}
-      </text>
-      <text x={x} y={y + 6} textAnchor={anchor} fill={fill} fontSize={10} opacity={0.8}>
-        {(percent * 100).toFixed(1)}%
-      </text>
+      {twoLine ? (
+        <>
+          <text x={x} y={y - 12} textAnchor={anchor} fill={fill} fontSize={9} fontWeight={600} opacity={0.65}>
+            {trunc(parentName, 14)}
+          </text>
+          <text x={x} y={y} textAnchor={anchor} fill={fill} fontSize={10} fontWeight={700}>
+            {trunc(name, 14)}
+          </text>
+          <text x={x} y={y + 12} textAnchor={anchor} fill={fill} fontSize={10} opacity={0.75}>
+            {(percent * 100).toFixed(1)}%
+          </text>
+        </>
+      ) : (
+        <>
+          <text x={x} y={y - 6} textAnchor={anchor} fill={fill} fontSize={10} fontWeight={600}>
+            {trunc(name, 14)}
+          </text>
+          <text x={x} y={y + 6} textAnchor={anchor} fill={fill} fontSize={10} opacity={0.8}>
+            {(percent * 100).toFixed(1)}%
+          </text>
+        </>
+      )}
     </g>
   )
 }

@@ -67,7 +67,7 @@ export function TransactionsPage() {
         {loading.transactions ? (
           <PageSpinner />
         ) : (
-          <TransactionList transactions={filtered} showDateHeaders />
+          <TransactionList transactions={filtered} showDateHeaders transferNeutral />
         )}
       </div>
 

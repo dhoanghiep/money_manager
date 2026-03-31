@@ -1,7 +1,14 @@
 import { format } from 'date-fns'
 import { getTransactionsForDay, sumIncome, sumExpense } from '../../utils/aggregations.js'
 import { toDateString } from '../../utils/dateHelpers.js'
-import { formatCurrency } from '../../utils/currencyFormatter.js'
+
+// Compact formatter to fit amounts inside small calendar cells
+function fmt(val) {
+  if (val >= 1_000_000) return (val / 1_000_000).toFixed(1) + 'M'
+  if (val >= 10_000)    return Math.round(val / 1_000) + 'k'
+  if (val >= 1_000)     return (val / 1_000).toFixed(1) + 'k'
+  return val.toFixed(2)
+}
 
 export function DayCell({ day, transactions, isCurrentMonth, isSelected, isToday, onClick }) {
   const dateStr = toDateString(day)
@@ -15,50 +22,45 @@ export function DayCell({ day, transactions, isCurrentMonth, isSelected, isToday
     <button
       onClick={onClick}
       className={`
-        relative flex flex-col items-center justify-start p-1 rounded-xl min-h-[60px] sm:min-h-[76px] transition w-full
+        relative flex flex-col items-center justify-start pt-1 pb-1 px-0.5 rounded-xl
+        min-h-[62px] sm:min-h-[76px] transition w-full overflow-hidden
         ${!isCurrentMonth ? 'opacity-30' : ''}
         ${isSelected ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}
-        ${isToday && !isSelected ? 'ring-2 ring-indigo-500' : ''}
+        ${isToday && !isSelected ? 'ring-2 ring-inset ring-indigo-500' : ''}
       `}
     >
       {/* Day number */}
-      <span className={`text-sm font-semibold leading-tight ${
-        isSelected ? 'text-white' : isToday ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-700 dark:text-gray-300'
+      <span className={`text-xs font-semibold leading-tight ${
+        isSelected ? 'text-white'
+          : isToday ? 'text-indigo-600 dark:text-indigo-400'
+          : 'text-gray-700 dark:text-gray-300'
       }`}>
         {format(day, 'd')}
       </span>
 
       {hasTxns && (
-        <>
-          {/* Mobile: colored dots */}
-          <div className="flex gap-0.5 mt-0.5 sm:hidden">
-            {inc > 0 && <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-green-300' : 'bg-green-500'}`} />}
-            {exp > 0 && <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-red-300' : 'bg-red-400'}`} />}
-          </div>
+        <div className="flex flex-col items-center w-full mt-0.5 gap-0">
+          {/* Net total — all screen sizes */}
+          <span className={`text-[9px] font-bold leading-tight w-full text-center truncate ${
+            isSelected
+              ? net >= 0 ? 'text-green-200' : 'text-red-200'
+              : net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'
+          }`}>
+            {net >= 0 ? '+' : '-'}{fmt(Math.abs(net))}
+          </span>
 
-          {/* Desktop: show net total + breakdown */}
-          <div className="hidden sm:flex flex-col items-center gap-0.5 mt-1 w-full px-0.5">
-            {/* Net total */}
-            <span className={`text-[11px] font-bold leading-tight ${
-              isSelected
-                ? net >= 0 ? 'text-green-200' : 'text-red-200'
-                : net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'
-            }`}>
-              {net >= 0 ? '+' : ''}{formatCurrency(net)}
-            </span>
-            {/* Breakdown (only if both exist) */}
-            {inc > 0 && exp > 0 && (
-              <div className="flex gap-1">
-                <span className={`text-[9px] ${isSelected ? 'text-green-300' : 'text-green-500 dark:text-green-500'}`}>
-                  ↑{formatCurrency(inc)}
-                </span>
-                <span className={`text-[9px] ${isSelected ? 'text-red-300' : 'text-red-400 dark:text-red-500'}`}>
-                  ↓{formatCurrency(exp)}
-                </span>
-              </div>
-            )}
-          </div>
-        </>
+          {/* Inc + Exp breakdown — stacked vertically to prevent overflow */}
+          {inc > 0 && exp > 0 && (
+            <>
+              <span className={`text-[8px] leading-tight w-full text-center truncate ${
+                isSelected ? 'text-green-300' : 'text-green-500 dark:text-green-400'
+              }`}>↑{fmt(inc)}</span>
+              <span className={`text-[8px] leading-tight w-full text-center truncate ${
+                isSelected ? 'text-red-300' : 'text-red-400 dark:text-red-400'
+              }`}>↓{fmt(exp)}</span>
+            </>
+          )}
+        </div>
       )}
     </button>
   )

@@ -112,7 +112,7 @@ export function CalendarPage() {
           {loading.transactions ? (
             <PageSpinner />
           ) : (
-            <TransactionList transactions={selectedDayTxns} showDateHeaders={false} />
+            <TransactionList transactions={selectedDayTxns} showDateHeaders={false} transferNeutral />
           )}
         </div>
       </div>

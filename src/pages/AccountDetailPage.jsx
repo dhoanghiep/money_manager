@@ -36,7 +36,7 @@ function periodLabel(period, refDate) {
 export function AccountDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { accounts, subAccountsOf } = useApp()
+  const { accounts, subAccountsOf, transactions: contextTxns } = useApp()
   const { defaultCurrency } = useCurrency()
 
   const account = accounts.find(a => a.id === id)
@@ -63,6 +63,12 @@ export function AccountDetailPage() {
     load()
   }, [])
 
+  // Sync edits/adds from AppContext (e.g. after editTransaction) into local allTxns
+  useEffect(() => {
+    if (contextTxns.length === 0) return
+    setAllTxns(prev => prev.map(t => contextTxns.find(c => c.id === t.id) ?? t))
+  }, [contextTxns])
+
   // All transactions for this account
   const accountTxns = useMemo(
     () => allTxns.filter(t => t.accountId === id),
@@ -73,8 +79,16 @@ export function AccountDetailPage() {
   const tabTxns = useMemo(
     () => activeSubId === 'all'
       ? accountTxns
-      : accountTxns.filter(t => (t.subAccountId || '') === activeSubId),
+      : activeSubId === '__general__'
+        ? accountTxns.filter(t => !t.subAccountId)
+        : accountTxns.filter(t => (t.subAccountId || '') === activeSubId),
     [accountTxns, activeSubId]
+  )
+
+  // Show "General" tab only when there are transactions with no sub-account
+  const hasGeneralTxns = useMemo(
+    () => accountTxns.some(t => !t.subAccountId),
+    [accountTxns]
   )
 
   // Period-filtered transactions
@@ -163,7 +177,9 @@ export function AccountDetailPage() {
         >
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs font-medium" style={{ color: account.color }}>
-              {activeSubId === 'all' ? 'Current Balance' : `Balance · ${accounts.find(a => a.id === activeSubId)?.name}`}
+              {activeSubId === 'all' ? 'Current Balance'
+                : activeSubId === '__general__' ? 'Balance · General'
+                : `Balance · ${accounts.find(a => a.id === activeSubId)?.name}`}
             </p>
             <button
               onClick={() => setMultiCurrency(v => !v)}
@@ -206,6 +222,18 @@ export function AccountDetailPage() {
             >
               All
             </button>
+            {hasGeneralTxns && (
+              <button
+                onClick={() => setActiveSubId('__general__')}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition ${
+                  activeSubId === '__general__'
+                    ? 'bg-gray-500 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
+                }`}
+              >
+                General
+              </button>
+            )}
             {subs.map(sub => (
               <button
                 key={sub.id}

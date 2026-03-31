@@ -5,22 +5,41 @@ import { EmptyState } from '../ui/EmptyState.jsx'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
 import { sumIncome, sumExpense } from '../../utils/aggregations.js'
 
-export function TransactionList({ transactions, showDateHeaders = true }) {
+// For each transferId keep only one row (prefer outflow leg → shows "To X").
+function dedupeTransfers(txns) {
+  const seen = new Map() // transferId → index in out[]
+  const out = []
+  for (const t of txns) {
+    if (!t.transferId) { out.push(t); continue }
+    if (!seen.has(t.transferId)) {
+      seen.set(t.transferId, out.length)
+      out.push(t)
+    } else {
+      const isOutflow = t.fromAccountId && t.accountId === t.fromAccountId
+      if (isOutflow) out[seen.get(t.transferId)] = t
+    }
+  }
+  return out
+}
+
+export function TransactionList({ transactions, showDateHeaders = true, transferNeutral = false }) {
   if (!transactions || transactions.length === 0) {
     return <EmptyState icon="💸" title="No transactions" description="Tap + to add your first transaction" />
   }
 
+  const deduped = dedupeTransfers(transactions)
+
   if (!showDateHeaders) {
     return (
       <div className="divide-y divide-gray-100 dark:divide-gray-800">
-        {transactions.map(t => (
-          <TransactionItem key={t.id} transaction={t} showDate />
+        {deduped.map(t => (
+          <TransactionItem key={t.id} transaction={t} showDate transferNeutral={transferNeutral} />
         ))}
       </div>
     )
   }
 
-  const grouped = groupByDate(transactions)
+  const grouped = groupByDate(deduped)
 
   return (
     <div>
@@ -41,7 +60,7 @@ export function TransactionList({ transactions, showDateHeaders = true }) {
             </div>
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               {items.map(t => (
-                <TransactionItem key={t.id} transaction={t} />
+                <TransactionItem key={t.id} transaction={t} transferNeutral={transferNeutral} />
               ))}
             </div>
           </div>
