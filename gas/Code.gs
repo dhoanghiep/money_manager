@@ -42,6 +42,9 @@ function doGet(e) {
       case 'getPreferences':
         result = getPreferences();
         break;
+      case 'getScheduleTransactionCount':
+        result = getScheduleTransactionCount(e.parameter.id);
+        break;
       case 'ping':
         result = { ok: true, timestamp: new Date().toISOString() };
         break;
