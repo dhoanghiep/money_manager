@@ -103,7 +103,10 @@ function doPost(e) {
         result = updateSchedule(id, data);
         break;
       case 'deleteSchedule':
-        result = deleteSchedule(id);
+        result = deleteSchedule(id, data && data.deleteTxns);
+        break;
+      case 'getScheduleTransactionCount':
+        result = getScheduleTransactionCount(id);
         break;
       case 'applyDueSchedules':
         result = applyDueSchedules();
@@ -169,6 +172,14 @@ function addTransaction(data) {
     data.subCategoryId || '',
     data.subAccountId || '',
   ]);
+  // Write scheduleId to the correct column if it exists (safe header-aware write)
+  if (data.scheduleId) {
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var schCol = headers.indexOf('scheduleId');
+    if (schCol !== -1) {
+      sheet.getRange(sheet.getLastRow(), schCol + 1).setValue(data.scheduleId);
+    }
+  }
   return { ok: true, id: id };
 }
 
@@ -629,6 +640,21 @@ function addTransferColumns() {
   Logger.log('Transfer migration complete!');
 }
 
+// ── scheduleId Column Migration ───────────────────────────────
+// Run once to add scheduleId to Transactions (links a transaction to the schedule that created it).
+function addScheduleIdColumn() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var txSheet = ss.getSheetByName('Transactions');
+  if (!txSheet) { Logger.log('Transactions sheet not found'); return; }
+  var headers = txSheet.getRange(1, 1, 1, txSheet.getLastColumn()).getValues()[0];
+  if (headers.indexOf('scheduleId') === -1) {
+    txSheet.getRange(1, txSheet.getLastColumn() + 1).setValue('scheduleId');
+    Logger.log('Added scheduleId column to Transactions');
+  } else {
+    Logger.log('scheduleId column already exists');
+  }
+}
+
 // Run once after updating Code.gs to add currency + exchangeRate columns to existing Transactions sheet.
 function addCurrencyColumns() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -702,7 +728,27 @@ function updateSchedule(id, data) {
   return { error: 'Schedule not found: ' + id };
 }
 
-function deleteSchedule(id) {
+function deleteSchedule(id, deleteTxns) {
+  // Optionally delete all transactions created by this schedule
+  if (deleteTxns) {
+    const txSheet = getSheet(SHEET_NAMES.TRANSACTIONS);
+    const txRows = txSheet.getDataRange().getValues();
+    const txHeaders = txRows[0];
+    const schIdCol = txHeaders.indexOf('scheduleId');
+    if (schIdCol !== -1) {
+      // Collect rows to delete (largest index first to avoid row shifting)
+      var toDelete = [];
+      for (var j = 1; j < txRows.length; j++) {
+        if (txRows[j][schIdCol] === id) {
+          toDelete.push(j + 1); // 1-indexed sheet row
+        }
+      }
+      for (var k = toDelete.length - 1; k >= 0; k--) {
+        txSheet.deleteRow(toDelete[k]);
+      }
+    }
+  }
+
   const sheet = getSheet(SHEET_NAMES.SCHEDULES);
   const rows = sheet.getDataRange().getValues();
   const idCol = rows[0].indexOf('id');
@@ -715,8 +761,22 @@ function deleteSchedule(id) {
   return { error: 'Schedule not found: ' + id };
 }
 
-// Called on app load — creates transactions for any overdue schedules
-// and advances their nextDate forward until it's in the future.
+// Returns how many transactions were created by the given schedule
+function getScheduleTransactionCount(scheduleId) {
+  const txSheet = getSheet(SHEET_NAMES.TRANSACTIONS);
+  const txRows = txSheet.getDataRange().getValues();
+  const txHeaders = txRows[0];
+  const schIdCol = txHeaders.indexOf('scheduleId');
+  if (schIdCol === -1) return { count: 0 };
+  var count = 0;
+  for (var i = 1; i < txRows.length; i++) {
+    if (txRows[i][schIdCol] === scheduleId) count++;
+  }
+  return { count: count };
+}
+
+// Called on app load (and after creating a new schedule) — creates transactions
+// for any overdue schedules and advances their nextDate past today.
 function applyDueSchedules() {
   const tz = Session.getScriptTimeZone();
   const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
@@ -729,6 +789,10 @@ function applyDueSchedules() {
   const col = {};
   headers.forEach(function(h, i) { col[h] = i; });
 
+  // Get the transaction sheet headers once (for scheduleId column lookup)
+  const txHeaders = txSheet.getRange(1, 1, 1, txSheet.getLastColumn()).getValues()[0];
+  const schIdCol = txHeaders.indexOf('scheduleId'); // -1 if column not added yet
+
   const applied = [];
 
   for (var i = 1; i < rows.length; i++) {
@@ -736,12 +800,13 @@ function applyDueSchedules() {
     if (!row[col['isActive']]) continue;
 
     const endDate = row[col['endDate']];
-    if (endDate && endDate <= today) continue;  // schedule expired
+    if (endDate && endDate < today) continue;  // schedule fully expired (note: < not <=)
 
     var nextDate = row[col['nextDate']];
-    if (!nextDate || nextDate > today) continue;
+    if (!nextDate || nextDate > today) continue; // not due yet
 
     const frequency = row[col['frequency']];
+    const scheduleId = row[col['id']];
 
     // Apply all missed periods up to and including today
     while (nextDate <= today) {
@@ -759,13 +824,17 @@ function applyDueSchedules() {
         row[col['note']] || '',
         now,
         now,
-        '',  // subCategoryId (schedules don't have sub-category)
       ]);
-      applied.push({ scheduleId: row[col['id']], transactionId: txId, date: nextDate });
+      // Write scheduleId to the correct column (header-aware, safe for existing sheets)
+      if (schIdCol !== -1) {
+        txSheet.getRange(txSheet.getLastRow(), schIdCol + 1).setValue(scheduleId);
+      }
+
+      applied.push({ scheduleId: scheduleId, transactionId: txId, date: nextDate });
       nextDate = advanceDate(nextDate, frequency);
     }
 
-    // Save updated nextDate back to sheet
+    // Save updated nextDate back to the schedule row
     schedSheet.getRange(i + 1, col['nextDate'] + 1).setValue(nextDate);
   }
 
@@ -823,7 +892,7 @@ function setupSheets() {
     return sheet;
   }
 
-  ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt', 'subCategoryId', 'currency', 'exchangeRate']);
+  ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt', 'subCategoryId', 'currency', 'exchangeRate', 'subAccountId', 'transferId', 'fromAccountId', 'toAccountId', 'scheduleId']);
   ensureSheet(SHEET_NAMES.CATEGORIES,   ['id', 'name', 'color', 'icon', 'type', 'isDefault', 'parentId']);
   ensureSheet(SHEET_NAMES.ACCOUNTS,     ['id', 'name', 'color', 'icon', 'type', 'initialBalance', 'isDefault']);
   ensureSheet(SHEET_NAMES.SCHEDULES,    ['id', 'name', 'amount', 'type', 'categoryId', 'accountId', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'isActive', 'createdAt']);

@@ -118,8 +118,12 @@ export const api = {
     return request('POST', {}, { action: 'updateSchedule', id, data })
   },
 
-  deleteSchedule(id) {
-    return request('POST', {}, { action: 'deleteSchedule', id })
+  deleteSchedule(id, deleteTxns = false) {
+    return request('POST', {}, { action: 'deleteSchedule', id, data: { deleteTxns } })
+  },
+
+  getScheduleTransactionCount(id) {
+    return request('GET', { action: 'getScheduleTransactionCount', id })
   },
 
   applyDueSchedules() {

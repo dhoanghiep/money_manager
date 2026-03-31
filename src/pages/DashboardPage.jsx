@@ -587,57 +587,61 @@ function StatsTab({ currency, onDrillDown }) {
 export function DashboardPage() {
   const { loading } = useApp()
   const { defaultCurrency } = useCurrency()
-  const [mainTab, setMainTab] = useState('accounts') // 'accounts' | 'stats'
+  const [mainTab, setMainTab] = useState('stats') // 'accounts' | 'stats'
   const [addOpen, setAddOpen] = useState(false)
   const [drillDown, setDrillDown] = useState(null)   // drill-down overlay state
 
   return (
-    // relative so DrillDownView (absolute inset-0) is constrained to this container
-    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-950 relative">
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-950">
 
-      {/* DrillDownView rendered here so it sits inside this relative container */}
-      {drillDown && (
-        <DrillDownView
-          {...drillDown}
-          onClose={() => setDrillDown(null)}
+      {/* Hide the normal header/tabs when DrillDown is open */}
+      {!drillDown && (
+        <Header
+          title="Dashboard"
+          right={
+            <button
+              onClick={() => setAddOpen(true)}
+              className="w-9 h-9 flex items-center justify-center rounded-xl bg-indigo-600 text-white text-xl hover:bg-indigo-700 transition"
+            >+</button>
+          }
         />
       )}
 
-      <Header
-        title="Dashboard"
-        right={
-          <button
-            onClick={() => setAddOpen(true)}
-            className="w-9 h-9 flex items-center justify-center rounded-xl bg-indigo-600 text-white text-xl hover:bg-indigo-700 transition"
-          >+</button>
-        }
-      />
-
       <div className="flex-1 overflow-y-auto pb-24">
 
-        {/* ── Top-level tab: Accounts / Stats ── */}
-        <div className="flex mx-4 mt-4 mb-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5">
-          {[{ key: 'accounts', label: '💳 Accounts' }, { key: 'stats', label: '📊 Stats' }].map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setMainTab(key)}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
-                mainTab === key
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {loading.accounts ? (
-          <PageSpinner />
-        ) : mainTab === 'accounts' ? (
-          <AccountsTab currency={defaultCurrency} />
+        {drillDown ? (
+          /* DrillDownView rendered inside the page scroll — no inner scroller */
+          <DrillDownView
+            {...drillDown}
+            onClose={() => setDrillDown(null)}
+          />
         ) : (
-          <StatsTab currency={defaultCurrency} onDrillDown={setDrillDown} />
+          <>
+            {/* ── Top-level tab: Accounts / Stats ── */}
+            <div className="flex mx-4 mt-4 mb-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5">
+              {[{ key: 'stats', label: '📊 Stats' }, { key: 'accounts', label: '💳 Accounts' }].map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setMainTab(key)}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
+                    mainTab === key
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {loading.accounts ? (
+              <PageSpinner />
+            ) : mainTab === 'accounts' ? (
+              <AccountsTab currency={defaultCurrency} />
+            ) : (
+              <StatsTab currency={defaultCurrency} onDrillDown={setDrillDown} />
+            )}
+          </>
         )}
       </div>
 

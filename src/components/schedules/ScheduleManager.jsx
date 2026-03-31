@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
+import { api } from '../../api/client.js'
 import { useToast } from '../ui/Toast.jsx'
 import { Button } from '../ui/Button.jsx'
 import { Input, Select, Textarea } from '../ui/Input.jsx'
@@ -131,6 +132,65 @@ function ScheduleForm({ schedule, onClose }) {
   )
 }
 
+// ── Delete confirmation modal ─────────────────────────────────
+
+function DeleteScheduleModal({ schedule, onConfirm, onCancel }) {
+  const [deleteTxns, setDeleteTxns] = useState(false)
+  const [txCount, setTxCount]       = useState(null) // null = loading
+
+  useEffect(() => {
+    api.getScheduleTransactionCount(schedule.id)
+      .then(res => setTxCount(res.count ?? 0))
+      .catch(() => setTxCount(0))
+  }, [schedule.id])
+
+  return (
+    <div className="p-5 flex flex-col gap-4">
+      <p className="text-sm text-gray-700 dark:text-gray-300">
+        Delete <span className="font-semibold">"{schedule.name}"</span>?
+        {txCount === null ? (
+          <span className="text-gray-400"> Checking transactions…</span>
+        ) : txCount > 0 ? (
+          <span className="text-gray-500 dark:text-gray-400">
+            {' '}This schedule has created <span className="font-semibold text-gray-800 dark:text-gray-200">{txCount} transaction{txCount !== 1 ? 's' : ''}</span>.
+          </span>
+        ) : (
+          <span className="text-gray-400"> No transactions have been created yet.</span>
+        )}
+      </p>
+
+      {txCount > 0 && (
+        <label className="flex items-center gap-3 cursor-pointer select-none bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3">
+          <input
+            type="checkbox"
+            checked={deleteTxns}
+            onChange={e => setDeleteTxns(e.target.checked)}
+            className="w-4 h-4 accent-red-500 flex-shrink-0"
+          />
+          <span className="text-sm text-red-700 dark:text-red-300 font-medium">
+            Also delete the {txCount} transaction{txCount !== 1 ? 's' : ''} created by this schedule
+          </span>
+        </label>
+      )}
+
+      <div className="flex gap-3 pt-1">
+        <button
+          onClick={onCancel}
+          className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => onConfirm(deleteTxns)}
+          className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition"
+        >
+          {deleteTxns ? `Delete schedule + ${txCount} txns` : 'Delete schedule'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Schedule Manager ──────────────────────────────────────────
 
 const FREQ_LABEL = { daily: 'Daily', weekly: 'Weekly', biweekly: 'Biweekly', monthly: 'Monthly', yearly: 'Yearly' }
@@ -139,16 +199,19 @@ const FREQ_ICON  = { daily: '📆', weekly: '🗓', biweekly: '🗓', monthly: '
 export function ScheduleManager() {
   const { schedules, categories, accounts, removeSchedule, editSchedule } = useApp()
   const toast = useToast()
-  const [formOpen, setFormOpen] = useState(false)
-  const [editTarget, setEditTarget] = useState(null)
+  const [formOpen, setFormOpen]       = useState(false)
+  const [editTarget, setEditTarget]   = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null) // schedule to confirm-delete
 
-  async function handleDelete(sch) {
-    if (!confirm(`Delete "${sch.name}"?`)) return
+  async function handleDeleteConfirm(deleteTxns) {
+    if (!deleteTarget) return
     try {
-      await removeSchedule(sch.id)
-      toast.show({ message: 'Schedule deleted' })
+      await removeSchedule(deleteTarget.id, deleteTxns)
+      toast.show({ message: deleteTxns ? 'Schedule and transactions deleted' : 'Schedule deleted' })
     } catch (err) {
       toast.show({ message: err.message, type: 'error' })
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -236,7 +299,7 @@ export function ScheduleManager() {
                     </button>
                     <button onClick={() => { setEditTarget(sch); setFormOpen(true) }}
                       className="p-1.5 text-gray-400 hover:text-indigo-600 transition">✏️</button>
-                    <button onClick={() => handleDelete(sch)}
+                    <button onClick={() => setDeleteTarget(sch)}
                       className="p-1.5 text-gray-400 hover:text-red-500 transition">🗑</button>
                   </div>
                 </div>
@@ -254,6 +317,16 @@ export function ScheduleManager() {
 
       <Modal open={formOpen} onClose={() => setFormOpen(false)} title={editTarget ? 'Edit Schedule' : 'New Schedule'} size="lg">
         <ScheduleForm schedule={editTarget} onClose={() => setFormOpen(false)} />
+      </Modal>
+
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Schedule">
+        {deleteTarget && (
+          <DeleteScheduleModal
+            schedule={deleteTarget}
+            onConfirm={handleDeleteConfirm}
+            onCancel={() => setDeleteTarget(null)}
+          />
+        )}
       </Modal>
     </div>
   )

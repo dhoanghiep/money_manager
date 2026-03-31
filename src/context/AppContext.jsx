@@ -278,9 +278,14 @@ export function AppProvider({ children }) {
     return updated
   }
 
-  async function removeSchedule(id) {
-    await api.deleteSchedule(id)
+  async function removeSchedule(id, deleteTxns = false) {
+    await api.deleteSchedule(id, deleteTxns)
     dispatch({ type: 'REMOVE_SCHEDULE', payload: id })
+    // If transactions were also deleted, reload the current month view
+    if (deleteTxns) {
+      const { start, end } = getMonthRange(new Date())
+      loadTransactions(start, end)
+    }
   }
 
   async function addAccount(data) {
