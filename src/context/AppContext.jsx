@@ -288,7 +288,8 @@ export function AppProvider({ children }) {
 
   async function editSchedule(id, data) {
     await api.updateSchedule(id, data)
-    dispatch({ type: 'UPDATE_SCHEDULE', payload: { id, data } })
+    // Reload from GAS so nextDate and other server-computed fields reflect reality
+    loadSchedules()
   }
 
   async function removeSchedule(id, deleteTxns = false) {
