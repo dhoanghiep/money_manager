@@ -13,7 +13,7 @@ import { api } from '../api/client.js'
 import { getMonthRange, getWeekRange, getQuarterRange, getYearRange } from '../utils/dateHelpers.js'
 
 export function TransactionsPage() {
-  const { categories, accounts } = useApp() // Only for filters, not for transactions
+  const { categories, accounts, txRevision } = useApp() // Only for filters, not for transactions
   const [addOpen, setAddOpen] = useState(false)
   const [filters, setFilters] = useState({ type: '', categoryId: '', accountId: '' })
   const [search, setSearch] = useState('')
@@ -53,10 +53,10 @@ export function TransactionsPage() {
     }
   }
 
-  // Fetch whenever the period/refDate changes (use string values — not object ref)
+  // Fetch whenever the period/refDate changes, or when a transaction is mutated elsewhere
   useEffect(() => {
     fetchTransactions(range.start, range.end)
-  }, [range.start, range.end])
+  }, [range.start, range.end, txRevision])
 
   // Refetch when add modal closes (user may have added a transaction)
   useEffect(() => {

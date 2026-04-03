@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useReducer } from 'react'
+import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState } from 'react'
 import { api } from '../api/client.js'
 import { getMonthRange } from '../utils/dateHelpers.js'
 
@@ -123,6 +123,10 @@ const AppContext = createContext(null)
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState)
+  // Bumped after every transaction mutation so pages with local fetch state
+  // (TransactionsPage, DrillDownView) can re-fetch without polling
+  const [txRevision, setTxRevision] = useState(0)
+  const bumpTx = () => setTxRevision(v => v + 1)
 
   // Load categories and accounts once on mount
   useEffect(() => {
@@ -216,17 +220,20 @@ export function AppProvider({ children }) {
     const res = await api.addTransaction(data)
     const newTxn = { ...data, id: res.id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
     dispatch({ type: 'UPSERT_TRANSACTION', payload: newTxn })
+    bumpTx()
     return newTxn
   }
 
   async function editTransaction(id, data) {
     await api.updateTransaction(id, data)
     dispatch({ type: 'UPDATE_TRANSACTION', payload: { id, data: { ...data, updatedAt: new Date().toISOString() } } })
+    bumpTx()
   }
 
   async function removeTransaction(id) {
     await api.deleteTransaction(id)
     dispatch({ type: 'REMOVE_TRANSACTION', payload: id })
+    bumpTx()
   }
 
   async function addTransfer(data) {
@@ -238,17 +245,20 @@ export function AppProvider({ children }) {
       createdAt: now, updatedAt: now }
     dispatch({ type: 'UPSERT_TRANSACTION', payload: { ...base, id: res.idOut, accountId: data.fromAccountId, subAccountId: data.fromSubAccountId || '' } })
     dispatch({ type: 'UPSERT_TRANSACTION', payload: { ...base, id: res.idIn,  accountId: data.toAccountId,  subAccountId: data.toSubAccountId   || '' } })
+    bumpTx()
     return res
   }
 
   async function editTransfer(transferId, data) {
     await api.updateTransfer(transferId, data)
     dispatch({ type: 'UPDATE_TRANSFER', payload: { transferId, data } })
+    bumpTx()
   }
 
   async function removeTransfer(transferId) {
     await api.deleteTransfer(transferId)
     dispatch({ type: 'REMOVE_TRANSFER', payload: transferId })
+    bumpTx()
   }
 
   async function addCategory(data) {
@@ -331,6 +341,7 @@ export function AppProvider({ children }) {
 
   const value = {
     ...state,
+    txRevision,
     topLevelCategories,
     subCategoriesOf,
     topLevelAccounts,
