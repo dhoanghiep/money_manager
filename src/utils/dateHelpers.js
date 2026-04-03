@@ -92,7 +92,12 @@ export function isCurrentMonth(day, referenceDate) {
 }
 
 export function formatDisplay(date, fmt = 'MMM d, yyyy') {
-  const d = typeof date === 'string' ? parseISO(date) : date
+  if (!date && date !== 0) return ''
+  let d
+  if (date instanceof Date)       d = date
+  else if (typeof date === 'string') d = parseISO(date)
+  else if (typeof date === 'number') d = new Date(date)  // Sheets serial or timestamp
+  else return ''
   return isValid(d) ? format(d, fmt) : ''
 }
 

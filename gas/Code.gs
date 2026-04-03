@@ -736,31 +736,33 @@ function addSchedule(data) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const id = generateId('sch');
   const now = new Date().toISOString();
-  sheet.appendRow([
-    id,
-    data.name || '',
-    data.amount,
-    data.type,
-    data.categoryId || '',
-    data.accountId || '',
-    data.note || '',
-    data.frequency,
-    data.startDate,
-    data.startDate,   // nextDate starts as startDate
-    data.endDate || '',
-    true,             // isActive
-    now,
-  ]);
-  // Write subCategoryId and subAccountId header-aware (safe for existing sheets without these columns)
-  var newRow = sheet.getLastRow();
-  if (data.subCategoryId) {
-    var subCatCol = headers.indexOf('subCategoryId');
-    if (subCatCol !== -1) sheet.getRange(newRow, subCatCol + 1).setValue(data.subCategoryId);
-  }
-  if (data.subAccountId) {
-    var subAccCol = headers.indexOf('subAccountId');
-    if (subAccCol !== -1) sheet.getRange(newRow, subAccCol + 1).setValue(data.subAccountId);
-  }
+  // Store nextDate as a Date object so Sheets creates a proper date cell
+  // (avoids the ambiguity of string-to-date parsing across locales)
+  const nextDateObj = new Date(data.startDate + 'T12:00:00');
+
+  // Build row by header name — immune to column order changes from migrations
+  const row = headers.map(function(h) {
+    switch (h) {
+      case 'id':            return id;
+      case 'name':          return data.name || '';
+      case 'amount':        return data.amount;
+      case 'type':          return data.type;
+      case 'categoryId':    return data.categoryId    || '';
+      case 'subCategoryId': return data.subCategoryId || '';
+      case 'accountId':     return data.accountId     || '';
+      case 'subAccountId':  return data.subAccountId  || '';
+      case 'note':          return data.note          || '';
+      case 'frequency':     return data.frequency;
+      case 'startDate':     return data.startDate;
+      case 'nextDate':      return nextDateObj; // Date object → Sheets date cell
+      case 'endDate':       return data.endDate        || '';
+      case 'isActive':      return true;
+      case 'createdAt':     return now;
+      default:              return '';
+    }
+  });
+
+  sheet.appendRow(row);
   return { ok: true, id: id };
 }
 
@@ -916,8 +918,8 @@ function applyDueSchedules() {
       nextDate = advanceDate(nextDate, frequency);
     }
 
-    // Save updated nextDate back to the schedule row
-    schedSheet.getRange(i + 1, col['nextDate'] + 1).setValue(nextDate);
+    // Save updated nextDate back as a Date object so Sheets stores a proper date cell
+    schedSheet.getRange(i + 1, col['nextDate'] + 1).setValue(new Date(nextDate + 'T12:00:00'));
   }
 
   return { ok: true, applied: applied };
