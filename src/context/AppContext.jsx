@@ -157,7 +157,13 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SET_LOADING', payload: { categories: true } })
     try {
       const res = await api.getCategories()
-      dispatch({ type: 'SET_CATEGORIES', payload: res.data || [] })
+      // Sort so "Other" is always last within each level (parentId group)
+      const cats = (res.data || []).sort((a, b) => {
+        if (a.name === 'Other' && b.name !== 'Other') return 1
+        if (b.name === 'Other' && a.name !== 'Other') return -1
+        return 0
+      })
+      dispatch({ type: 'SET_CATEGORIES', payload: cats })
     } catch (e) {
       dispatch({ type: 'SET_ERROR', payload: e.message })
     } finally {

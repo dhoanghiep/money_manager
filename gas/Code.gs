@@ -364,7 +364,29 @@ function getCategories() {
 function addCategory(data) {
   const sheet = getSheet(SHEET_NAMES.CATEGORIES);
   const id = generateId('cat');
-  sheet.appendRow([id, data.name, data.color || '#6B7280', data.icon || '📁', data.type || 'expense', false, data.parentId || '']);
+  const newRow = [id, data.name, data.color || '#6B7280', data.icon || '📁', data.type || 'expense', false, data.parentId || ''];
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  const nameCol = headers.indexOf('name');
+  const parentIdCol = headers.indexOf('parentId');
+  const parentId = data.parentId || '';
+
+  // Find the "Other" row at the same level (same parentId) and insert before it
+  var otherRowIdx = -1;
+  for (var i = 1; i < rows.length; i++) {
+    var rowParent = parentIdCol !== -1 ? (rows[i][parentIdCol] || '') : '';
+    if (rows[i][nameCol] === 'Other' && rowParent === parentId) {
+      otherRowIdx = i + 1; // 1-based sheet row number
+      break;
+    }
+  }
+
+  if (otherRowIdx !== -1) {
+    sheet.insertRowBefore(otherRowIdx);
+    sheet.getRange(otherRowIdx, 1, 1, newRow.length).setValues([newRow]);
+  } else {
+    sheet.appendRow(newRow);
+  }
   return { ok: true, id: id };
 }
 
