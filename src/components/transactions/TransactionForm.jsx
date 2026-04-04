@@ -113,7 +113,7 @@ export function TransactionForm({ transaction, onClose }) {
   }, [toAccountId])
 
   const filteredCategories = topLevelCategories.filter(c => c.type === type || c.type === 'both')
-  const availableSubCategories = categoryId ? subCategoriesOf(categoryId) : []
+  const availableSubCategories = categoryId ? subCategoriesOf(categoryId).filter(c => c.name !== 'General') : []
   const availableSubAccounts = accountId ? subAccountsOf(accountId) : []
   const fromSubAccounts = accountId ? subAccountsOf(accountId) : []
   const toSubAccounts   = toAccountId ? subAccountsOf(toAccountId) : []
@@ -375,8 +375,8 @@ export function TransactionForm({ transaction, onClose }) {
             ))}
           </Select>
 
-          {/* Sub-category */}
-          {categoryId && (
+          {/* Sub-category — only when real sub-categories exist (not just General) */}
+          {availableSubCategories.length > 0 && (
             <Select
               label="Sub-category"
               value={subCategoryId}

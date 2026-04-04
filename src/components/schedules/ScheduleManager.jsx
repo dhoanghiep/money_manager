@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { api } from '../../api/client.js'
 import { useToast } from '../ui/Toast.jsx'
@@ -43,7 +43,7 @@ function ScheduleForm({ schedule, onClose }) {
 
   // Derive filtered lists
   const filteredCategories  = topLevelCategories.filter(c => c.type === type || c.type === 'both')
-  const availableSubCats    = categoryId ? subCategoriesOf(categoryId) : []
+  const availableSubCats    = categoryId ? subCategoriesOf(categoryId).filter(c => c.name !== 'General') : []
   const availableSubAccounts = accountId ? subAccountsOf(accountId) : []
 
   async function handleSubmit(e) {
