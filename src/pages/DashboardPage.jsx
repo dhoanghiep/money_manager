@@ -320,7 +320,7 @@ function AccountsTab({ currency }) {
 // ── Stats tab ─────────────────────────────────────────────────
 
 function StatsTab({ currency, onDrillDown }) {
-  const { categories, accounts } = useApp()
+  const { categories, accounts, txRevision } = useApp()
   const [period, setPeriod] = useState('month')
   const [refDate, setRefDate] = useState(today())
   const [txType, setTxType] = useState('expense')
@@ -330,13 +330,13 @@ function StatsTab({ currency, onDrillDown }) {
 
   const range = useMemo(() => getPeriodRange(period, refDate), [period, refDate])
 
-  // Fetch fresh from API whenever period/refDate changes
+  // Fetch fresh from API whenever period/refDate changes or a transaction is mutated
   useEffect(() => {
     setLoading(true)
     api.getTransactions(range.start, range.end)
       .then(res => setPeriodTxns(res.data || []))
       .finally(() => setLoading(false))
-  }, [range.start, range.end])
+  }, [range.start, range.end, txRevision])
 
   const filtered = useMemo(
     () => getTransactionsForDateRange(periodTxns, range.start, range.end),
