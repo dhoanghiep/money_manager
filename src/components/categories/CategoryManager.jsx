@@ -19,14 +19,19 @@ const COLORS = ['#EF4444','#F97316','#F59E0B','#84CC16','#22C55E','#14B8A6','#3B
 // ── Category Form (used for both parent and sub-category) ─────
 
 function CategoryForm({ category, parentId, onClose }) {
-  const { addCategory, editCategory } = useApp()
+  const { categories, addCategory, editCategory } = useApp()
   const toast = useToast()
   const isEdit = !!category
   const isSub = !!(parentId || category?.parentId)
 
   const [name, setName] = useState(category?.name || '')
   const [icon, setIcon] = useState(category?.icon || '📦')
-  const [color, setColor] = useState(category?.color || '#6366F1')
+  const [color, setColor] = useState(() => {
+    if (category?.color) return category.color
+    // Pick the first palette colour not already used by a sibling category
+    const usedColors = new Set(categories.map(c => c.color))
+    return COLORS.find(c => !usedColors.has(c)) ?? COLORS[0]
+  })
   const [type, setType] = useState(category?.type || 'expense')
   const [loading, setLoading] = useState(false)
 
