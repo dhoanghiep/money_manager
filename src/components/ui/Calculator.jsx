@@ -31,19 +31,38 @@ function evaluate(expr) {
   }
 }
 
+// Scale display text down when expression is long
+function displaySize(str) {
+  const len = str.length
+  if (len <= 8)  return 'text-5xl'
+  if (len <= 12) return 'text-4xl'
+  if (len <= 18) return 'text-3xl'
+  return 'text-2xl'
+}
+
+function equationSize(str) {
+  const len = str.length
+  if (len <= 16) return 'text-base'
+  if (len <= 24) return 'text-sm'
+  return 'text-xs'
+}
+
 export function Calculator({ initialValue = '', onDone, onClose }) {
-  const [display, setDisplay] = useState(initialValue || '0')
+  const [display, setDisplay]   = useState(initialValue || '0')
+  const [equation, setEquation] = useState('') // expression shown above result after =
   const [justEvaled, setJustEvaled] = useState(false)
 
   function press(key) {
     setDisplay(prev => {
       if (key === 'AC') {
         setJustEvaled(false)
+        setEquation('')
         return '0'
       }
 
       if (key === '⌫') {
         setJustEvaled(false)
+        setEquation('')
         const next = prev.length > 1 ? prev.slice(0, -1) : '0'
         return next
       }
@@ -51,15 +70,23 @@ export function Calculator({ initialValue = '', onDone, onClose }) {
       if (key === '=') {
         const result = evaluate(prev)
         setJustEvaled(true)
+        setEquation(prev + ' =')   // store expression for display
         return result ?? prev
       }
 
       const isOp = ['÷', '×', '−', '+'].includes(key)
 
-      // After evaluation, pressing an operator continues; pressing a digit resets
+      // After evaluation, pressing an operator continues from result;
+      // pressing a digit starts fresh
       if (justEvaled) {
         setJustEvaled(false)
-        if (!isOp) return key === '.' ? '0.' : key
+        if (isOp) {
+          // keep equation visible, continue expression
+          setEquation('')
+          return prev + key
+        }
+        setEquation('')
+        return key === '.' ? '0.' : key
       }
 
       // Don't allow two operators in a row
@@ -105,13 +132,20 @@ export function Calculator({ initialValue = '', onDone, onClose }) {
 
       <div className="relative w-full max-w-sm bg-gray-800 dark:bg-gray-900 rounded-t-2xl overflow-hidden shadow-2xl">
         {/* Display */}
-        <div className="relative px-5 pt-10 pb-6 text-right">
+        <div className="relative px-5 pt-10 pb-6 text-right min-h-[120px] flex flex-col justify-end">
           <button
             type="button"
             onClick={onClose}
             className="absolute top-3 right-4 text-gray-400 hover:text-white text-xl p-1"
           >×</button>
-          <div className="text-white text-5xl font-light tracking-tight truncate">
+          {/* Equation line — shown after = is pressed */}
+          {equation && (
+            <div className={`text-gray-400 font-light mb-1 truncate ${equationSize(equation)}`}>
+              {equation}
+            </div>
+          )}
+          {/* Main display — scales down when long */}
+          <div className={`text-white font-light tracking-tight truncate transition-all ${displaySize(display)}`}>
             {display}
           </div>
         </div>
