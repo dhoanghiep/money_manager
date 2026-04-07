@@ -107,6 +107,7 @@ export function Calculator({ initialValue = '', onDone, onClose }) {
         {/* Display */}
         <div className="relative px-5 pt-10 pb-6 text-right">
           <button
+            type="button"
             onClick={onClose}
             className="absolute top-3 right-4 text-gray-400 hover:text-white text-xl p-1"
           >×</button>
@@ -122,6 +123,7 @@ export function Calculator({ initialValue = '', onDone, onClose }) {
               {row.map(key => (
                 <button
                   key={key}
+                  type="button"
                   onClick={key === 'DONE' ? handleDone : () => press(key)}
                   className={`flex-1 py-5 text-xl border-r border-gray-700 last:border-0 active:opacity-60 transition-opacity ${buttonStyle(key)}`}
                 >
