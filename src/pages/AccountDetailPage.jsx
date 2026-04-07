@@ -333,7 +333,7 @@ export function AccountDetailPage() {
       </div>
 
       {/* Add transaction modal pre-filled with this account */}
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Transaction">
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Transaction" size="fullscreen">
         <TransactionForm
           transaction={{ accountId: id, subAccountId: activeSubId !== 'all' ? activeSubId : '' }}
           onClose={() => {

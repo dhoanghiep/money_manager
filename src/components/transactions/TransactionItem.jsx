@@ -202,7 +202,7 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
       </div>
 
       {/* Edit modal */}
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={isTransfer ? 'Edit Transfer' : 'Edit Transaction'}>
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={isTransfer ? 'Edit Transfer' : 'Edit Transaction'} size="fullscreen">
         <TransactionForm
           transaction={isTransfer ? buildTransferEditObj() : transaction}
           onClose={() => setEditOpen(false)}

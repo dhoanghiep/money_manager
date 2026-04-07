@@ -117,7 +117,7 @@ export function CalendarPage() {
         </div>
       </div>
 
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Transaction">
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Transaction" size="fullscreen">
         <TransactionForm
           transaction={{ date: selectedDayStr }}
           onClose={() => setAddOpen(false)}

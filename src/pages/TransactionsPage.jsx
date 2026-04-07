@@ -188,7 +188,7 @@ export function TransactionsPage() {
         )}
       </div>
 
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Transaction">
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Transaction" size="fullscreen">
         <TransactionForm onClose={() => setAddOpen(false)} />
       </Modal>
     </div>
