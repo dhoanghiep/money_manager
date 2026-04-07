@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
+import { Calculator } from '../ui/Calculator.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { api } from '../../api/client.js'
 import { useToast } from '../ui/Toast.jsx'
@@ -27,6 +28,7 @@ function ScheduleForm({ schedule, onClose }) {
   const [name, setName]           = useState(schedule?.name || '')
   const [type, setType]           = useState(schedule?.type || 'expense')
   const [amount, setAmount]       = useState(schedule?.amount?.toString() || '')
+  const [calcOpen, setCalcOpen]   = useState(false)
   const [categoryId, setCategoryId]       = useState(schedule?.categoryId || '')
   const [subCategoryId, setSubCategoryId] = useState(schedule?.subCategoryId || '')
   const [accountId, setAccountId] = useState(() => {
@@ -99,14 +101,32 @@ function ScheduleForm({ schedule, onClose }) {
 
       <Input label="Name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Rent, Netflix, Salary…" required />
 
-      <Input
-        label="Amount"
-        type="number" inputMode="decimal" step="0.01" min="0"
-        placeholder="0.00"
-        value={amount}
-        onChange={e => setAmount(e.target.value)}
-        className="text-2xl font-bold"
-      />
+      {calcOpen && (
+        <Calculator
+          initialValue={amount}
+          onDone={val => { setAmount(val); setCalcOpen(false) }}
+          onClose={() => setCalcOpen(false)}
+        />
+      )}
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Amount</label>
+        <div className="relative">
+          <input
+            type="number" inputMode="decimal" step="0.01" min="0"
+            placeholder="0.00"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 pr-10 text-2xl font-bold text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+          />
+          <button
+            type="button"
+            onClick={() => setCalcOpen(true)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition text-sm"
+            title="Open calculator"
+          >⊞</button>
+        </div>
+      </div>
 
       <Select label="Frequency" value={frequency} onChange={e => setFrequency(e.target.value)}>
         {FREQUENCIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}

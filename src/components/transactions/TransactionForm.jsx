@@ -6,6 +6,7 @@ import { useToast } from '../ui/Toast.jsx'
 import { Button } from '../ui/Button.jsx'
 import { Input, Select } from '../ui/Input.jsx'
 import { NoteInput } from '../ui/NoteInput.jsx'
+import { Calculator } from '../ui/Calculator.jsx'
 import { toDateString, today } from '../../utils/dateHelpers.js'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
 import { getDefaultAccountId, getDefaultSubAccountId } from '../accounts/AccountManager.jsx'
@@ -19,6 +20,7 @@ export function TransactionForm({ transaction, onClose }) {
 
   const [type, setType] = useState(transaction?.type || 'expense')
   const [amount, setAmount] = useState(transaction?.amount?.toString() || '')
+  const [calcTarget, setCalcTarget] = useState(null) // 'amount' | 'rate' | null
   const [date, setDate] = useState(transaction?.date || toDateString(today()))
   const [categoryId, setCategoryId] = useState(transaction?.categoryId || '')
   const [subCategoryId, setSubCategoryId] = useState(transaction?.subCategoryId || '')
@@ -234,21 +236,44 @@ export function TransactionForm({ transaction, onClose }) {
         ))}
       </div>
 
+      {/* Calculator modal */}
+      {calcTarget && (
+        <Calculator
+          initialValue={calcTarget === 'amount' ? amount : exchangeRate}
+          onDone={val => {
+            if (calcTarget === 'amount') setAmount(val)
+            else setExchangeRate(val)
+            setCalcTarget(null)
+          }}
+          onClose={() => setCalcTarget(null)}
+        />
+      )}
+
       {/* Amount + Currency row */}
       <div className="flex gap-2 items-end">
         <div className="flex-1">
-          <Input
-            label="Amount"
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            error={errors.amount}
-            className="text-2xl font-bold"
-          />
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Amount</label>
+            <div className="relative">
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                className={`w-full rounded-xl border bg-white dark:bg-gray-800 px-3 py-2.5 pr-10 text-2xl font-bold text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition ${errors.amount ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 dark:border-gray-700'}`}
+              />
+              <button
+                type="button"
+                onClick={() => setCalcTarget('amount')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition text-sm"
+                title="Open calculator"
+              >⊞</button>
+            </div>
+            {errors.amount && <span className="text-xs text-red-500">{errors.amount}</span>}
+          </div>
         </div>
         <div className="pb-0.5">
           <Select
@@ -280,17 +305,25 @@ export function TransactionForm({ transaction, onClose }) {
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <input
-              type="number"
-              step="any"
-              min="0"
-              placeholder="e.g. 1.55"
-              value={exchangeRate}
-              onChange={e => setExchangeRate(e.target.value)}
-              className={`flex-1 px-3 py-2 text-sm rounded-lg border bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                errors.exchangeRate ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
-              }`}
-            />
+            <div className="relative flex-1">
+              <input
+                type="number"
+                step="any"
+                min="0"
+                placeholder="e.g. 1.55"
+                value={exchangeRate}
+                onChange={e => setExchangeRate(e.target.value)}
+                className={`w-full px-3 py-2 pr-9 text-sm rounded-lg border bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                  errors.exchangeRate ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => setCalcTarget('rate')}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition text-xs"
+                title="Open calculator"
+              >⊞</button>
+            </div>
             <span className="text-sm text-gray-500 dark:text-gray-400">{defaultCurrency}</span>
           </div>
           {errors.exchangeRate && <p className="text-xs text-red-500">{errors.exchangeRate}</p>}
