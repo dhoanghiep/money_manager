@@ -114,11 +114,22 @@ export function TransactionForm({ transaction, onClose }) {
     setToSubAccountId(toAccountId ? (getDefaultSubAccountId(toAccountId) || '') : '')
   }, [toAccountId])
 
+  // When same-account mode: if fromSubAccountId changes and matches toSubAccountId, clear toSubAccountId
+  useEffect(() => {
+    if (toAccountId === accountId && fromSubAccountId && fromSubAccountId === toSubAccountId) {
+      setToSubAccountId('')
+    }
+  }, [fromSubAccountId, toAccountId, accountId])
+
   const filteredCategories = topLevelCategories.filter(c => c.type === type || c.type === 'both')
   const availableSubCategories = categoryId ? subCategoriesOf(categoryId).filter(c => c.name !== 'General') : []
   const availableSubAccounts = accountId ? subAccountsOf(accountId) : []
   const fromSubAccounts = accountId ? subAccountsOf(accountId) : []
-  const toSubAccounts   = toAccountId ? subAccountsOf(toAccountId) : []
+  const toSubAccountsRaw = toAccountId ? subAccountsOf(toAccountId) : []
+  // When transferring within the same account, exclude the selected fromSubAccountId
+  const toSubAccounts = (toAccountId === accountId)
+    ? toSubAccountsRaw.filter(a => a.id !== fromSubAccountId)
+    : toSubAccountsRaw
 
   const isForeign = currency !== defaultCurrency
   const rate = parseFloat(exchangeRate) || 0
@@ -152,7 +163,12 @@ export function TransactionForm({ transaction, onClose }) {
     if (isTransfer && !accountId) errs.accountId = 'Select the source account'
     if (isTransfer && !toAccountId) errs.toAccountId = 'Select the destination account'
     if (isTransfer && accountId && toAccountId && accountId === toAccountId) {
-      errs.toAccountId = 'Source and destination must differ'
+      // Same main account is OK only if transferring between different sub-accounts
+      if (!fromSubAccountId && !toSubAccountId) {
+        errs.toAccountId = 'Select different sub-accounts for intra-account transfer'
+      } else if (fromSubAccountId === toSubAccountId) {
+        errs.toSubAccountId = 'Source and destination sub-accounts must differ'
+      }
     }
     return errs
   }
@@ -377,8 +393,10 @@ export function TransactionForm({ transaction, onClose }) {
             error={errors.toAccountId}
           >
             <option value="">— Select account —</option>
-            {accounts.filter(a => !a.parentId && a.id !== accountId).map(a => (
-              <option key={a.id} value={a.id}>{a.icon} {a.name}</option>
+            {accounts.filter(a => !a.parentId).map(a => (
+              <option key={a.id} value={a.id}>
+                {a.icon} {a.name}{a.id === accountId ? ' (same account)' : ''}
+              </option>
             ))}
           </Select>
           {toSubAccounts.length > 0 && (
@@ -386,6 +404,7 @@ export function TransactionForm({ transaction, onClose }) {
               label="To Sub-account"
               value={toSubAccountId}
               onChange={e => setToSubAccountId(e.target.value)}
+              error={errors.toSubAccountId}
             >
               <option value="">General</option>
               {toSubAccounts.map(a => (

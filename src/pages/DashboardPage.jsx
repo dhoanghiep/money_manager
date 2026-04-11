@@ -124,7 +124,6 @@ function AccountsTab({ currency }) {
   const monthlyData = useMemo(() => {
     const map = {}
     allTxns.forEach(t => {
-      if (t.type === 'transfer') return          // exclude transfers from activity
       const raw = String(t.date || '')
       const d = raw.length >= 7 ? raw.slice(0, 7) : null
       if (!d) return
@@ -133,6 +132,11 @@ function AccountsTab({ currency }) {
       const amt = Number(t.amount) * (Number(t.exchangeRate) || 1)
       if (t.type === 'income')  map[d][t.accountId].income  += amt
       if (t.type === 'expense') map[d][t.accountId].expense += amt
+      if (t.type === 'transfer') {
+        // Treat transfer-out as expense, transfer-in as income for this account
+        if (t.accountId === t.fromAccountId) map[d][t.accountId].expense += amt
+        else if (t.accountId === t.toAccountId) map[d][t.accountId].income += amt
+      }
     })
     // Sort months newest first
     return Object.entries(map)

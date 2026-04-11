@@ -104,8 +104,19 @@ export function AccountDetailPage() {
     return base + sumIncome(tabTxns) - sumExpense(tabTxns) + sumTransferBalance(tabTxns)
   }, [tabTxns, account, activeSubId])
 
-  const income = useMemo(() => sumIncome(periodTxns), [periodTxns])
-  const expense = useMemo(() => sumExpense(periodTxns), [periodTxns])
+  const income = useMemo(() => {
+    const transferIn = periodTxns
+      .filter(t => t.type === 'transfer' && t.accountId === t.toAccountId)
+      .reduce((acc, t) => acc + Number(t.amount) * (Number(t.exchangeRate) || 1), 0)
+    return sumIncome(periodTxns) + transferIn
+  }, [periodTxns])
+
+  const expense = useMemo(() => {
+    const transferOut = periodTxns
+      .filter(t => t.type === 'transfer' && t.accountId === t.fromAccountId)
+      .reduce((acc, t) => acc + Number(t.amount) * (Number(t.exchangeRate) || 1), 0)
+    return sumExpense(periodTxns) + transferOut
+  }, [periodTxns])
 
   // Per-currency raw balances (un-converted) from all-time tabTxns
   const currencyBalances = useMemo(() => {
