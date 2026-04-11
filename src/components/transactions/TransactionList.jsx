@@ -18,7 +18,11 @@ function dedupeTransfers(txns) {
       seen.set(t.transferId, out.length)
       out.push(t)
     } else {
-      const isOutflow = t.fromAccountId && t.accountId === t.fromAccountId
+      const isOutflow = t.fromAccountId && (
+        t.fromAccountId !== t.toAccountId
+          ? t.accountId === t.fromAccountId
+          : (t.subAccountId || '') === (t.fromSubAccountId || '')
+      )
       if (isOutflow) out[seen.get(t.transferId)] = t
     }
   }

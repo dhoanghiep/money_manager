@@ -133,7 +133,8 @@ function AccountsTab({ currency }) {
       if (t.type === 'income')  map[d][t.accountId].income  += amt
       if (t.type === 'expense') map[d][t.accountId].expense += amt
       if (t.type === 'transfer') {
-        // Treat transfer-out as expense, transfer-in as income for this account
+        // Intra-account transfers net to zero — skip to avoid double-counting
+        if (t.fromAccountId === t.toAccountId) return
         if (t.accountId === t.fromAccountId) map[d][t.accountId].expense += amt
         else if (t.accountId === t.toAccountId) map[d][t.accountId].income += amt
       }

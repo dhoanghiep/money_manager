@@ -106,15 +106,31 @@ export function AccountDetailPage() {
 
   const income = useMemo(() => {
     const transferIn = periodTxns
-      .filter(t => t.type === 'transfer' && t.accountId === t.toAccountId)
-      .reduce((acc, t) => acc + Number(t.amount) * (Number(t.exchangeRate) || 1), 0)
+      .filter(t => t.type === 'transfer')
+      .reduce((acc, t) => {
+        const amt = Number(t.amount) * (Number(t.exchangeRate) || 1)
+        if (t.fromAccountId === t.toAccountId) {
+          const sub = t.subAccountId || ''
+          return (sub === (t.toSubAccountId || '') && sub !== (t.fromSubAccountId || ''))
+            ? acc + amt : acc
+        }
+        return t.accountId === t.toAccountId ? acc + amt : acc
+      }, 0)
     return sumIncome(periodTxns) + transferIn
   }, [periodTxns])
 
   const expense = useMemo(() => {
     const transferOut = periodTxns
-      .filter(t => t.type === 'transfer' && t.accountId === t.fromAccountId)
-      .reduce((acc, t) => acc + Number(t.amount) * (Number(t.exchangeRate) || 1), 0)
+      .filter(t => t.type === 'transfer')
+      .reduce((acc, t) => {
+        const amt = Number(t.amount) * (Number(t.exchangeRate) || 1)
+        if (t.fromAccountId === t.toAccountId) {
+          const sub = t.subAccountId || ''
+          return (sub === (t.fromSubAccountId || '') && sub !== (t.toSubAccountId || ''))
+            ? acc + amt : acc
+        }
+        return t.accountId === t.fromAccountId ? acc + amt : acc
+      }, 0)
     return sumExpense(periodTxns) + transferOut
   }, [periodTxns])
 

@@ -52,12 +52,20 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
   const toAccountId   = transaction.toAccountId   || (otherLeg ? transaction.accountId : null)
 
   // Transfer direction: is money leaving this account?
-  const transferOut = isTransfer && !!(fromAccountId) && transaction.accountId === fromAccountId
+  const isIntraAccount = isTransfer && fromAccountId && fromAccountId === toAccountId
+  const transferOut = isTransfer && !!(fromAccountId) && (
+    isIntraAccount
+      ? (transaction.subAccountId || '') === (transaction.fromSubAccountId || '')
+      : transaction.accountId === fromAccountId
+  )
   const counterpartId = isTransfer ? (transferOut ? toAccountId : fromAccountId) : null
   const counterpart = accounts.find(a => a.id === counterpartId)
   const directionLabel = isTransfer ? (fromAccountId ? (transferOut ? 'To' : 'From') : '⇄') : null
   const fromAccount = accounts.find(a => a.id === fromAccountId)
   const toAccount   = accounts.find(a => a.id === toAccountId)
+  // For intra-account transfers, look up sub-account names for clearer display
+  const fromSubAcc = isIntraAccount ? accounts.find(a => a.id === transaction.fromSubAccountId) : null
+  const toSubAcc   = isIntraAccount ? accounts.find(a => a.id === transaction.toSubAccountId)   : null
   const isIncome = transaction.type === 'income'
 
   // Hide delete for transactions older than 2 days
@@ -109,7 +117,27 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
               {isTransfer ? (
-                isTransfer && transferNeutral ? (
+                isIntraAccount ? (
+                  // Intra-account: show "SubA → SubB" with account name as context
+                  transferNeutral ? (
+                    <>
+                      {fromSubAcc ? `${fromSubAcc.icon} ${fromSubAcc.name}` : 'General'}
+                      <span className="text-gray-400 dark:text-gray-500 font-normal"> → </span>
+                      {toSubAcc ? `${toSubAcc.icon} ${toSubAcc.name}` : 'General'}
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-gray-400 dark:text-gray-500 font-normal text-xs">
+                        {transferOut ? 'To' : 'From'}
+                      </span>
+                      {' '}
+                      {transferOut
+                        ? (toSubAcc ? `${toSubAcc.icon} ${toSubAcc.name}` : 'General')
+                        : (fromSubAcc ? `${fromSubAcc.icon} ${fromSubAcc.name}` : 'General')
+                      }
+                    </>
+                  )
+                ) : transferNeutral ? (
                   <>
                     {fromAccount ? `${fromAccount.icon} ${fromAccount.name}` : '?'}
                     <span className="text-gray-400 dark:text-gray-500 font-normal"> → </span>
@@ -164,7 +192,10 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
           <div className="flex items-center gap-2 mt-0.5">
             {isTransfer && !transferNeutral ? (
               <span className="text-xs text-gray-400 dark:text-gray-500">
-                {account?.icon} {account?.name} {transferOut ? '→' : '←'} {counterpart?.icon} {counterpart?.name}
+                {isIntraAccount
+                  ? `${fromAccount?.icon} ${fromAccount?.name} · ${fromSubAcc?.name ?? 'General'} → ${toSubAcc?.name ?? 'General'}`
+                  : `${account?.icon} ${account?.name} ${transferOut ? '→' : '←'} ${counterpart?.icon} ${counterpart?.name}`
+                }
               </span>
             ) : !isTransfer ? (
               account && (
