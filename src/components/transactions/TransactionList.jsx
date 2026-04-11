@@ -42,7 +42,7 @@ function ShowMoreButton({ shown, total, onMore }) {
   )
 }
 
-export function TransactionList({ transactions, showDateHeaders = true, transferNeutral = false }) {
+export function TransactionList({ transactions, showDateHeaders = true, transferNeutral = false, neutralIntraAccount = false }) {
   const [page, setPage] = useState(1)
 
   // Reset to first page whenever the transactions list changes
@@ -61,7 +61,7 @@ export function TransactionList({ transactions, showDateHeaders = true, transfer
       <div>
         <div className="divide-y divide-gray-100 dark:divide-gray-800">
           {visible.map(t => (
-            <TransactionItem key={t.id} transaction={t} showDate transferNeutral={transferNeutral} />
+            <TransactionItem key={t.id} transaction={t} showDate transferNeutral={transferNeutral} neutralIntraAccount={neutralIntraAccount} />
           ))}
         </div>
         <ShowMoreButton shown={visible.length} total={deduped.length} onMore={() => setPage(p => p + 1)} />
@@ -92,7 +92,7 @@ export function TransactionList({ transactions, showDateHeaders = true, transfer
             </div>
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               {items.map(t => (
-                <TransactionItem key={t.id} transaction={t} transferNeutral={transferNeutral} />
+                <TransactionItem key={t.id} transaction={t} transferNeutral={transferNeutral} neutralIntraAccount={neutralIntraAccount} />
               ))}
             </div>
           </div>

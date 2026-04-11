@@ -7,7 +7,7 @@ import { TransactionForm } from './TransactionForm.jsx'
 import { formatCurrency } from '../../utils/currencyFormatter.js'
 import { formatDisplay } from '../../utils/dateHelpers.js'
 
-export function TransactionItem({ transaction, showDate = false, transferNeutral = false }) {
+export function TransactionItem({ transaction, showDate = false, transferNeutral = false, neutralIntraAccount = false }) {
   const { categories, accounts, transactions, removeTransaction, removeTransfer } = useApp()
 
   // Build a merged "transfer edit object" combining both legs, for the edit form.
@@ -67,6 +67,10 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
   const fromSubAcc = isIntraAccount ? accounts.find(a => a.id === transaction.fromSubAccountId) : null
   const toSubAcc   = isIntraAccount ? accounts.find(a => a.id === transaction.toSubAccountId)   : null
   const isIncome = transaction.type === 'income'
+  // Render transfer as neutral (no color, no sign) when:
+  // - explicitly requested via transferNeutral, OR
+  // - it's an intra-account transfer shown in the "All sub-accounts" view
+  const renderAsNeutral = (isTransfer && transferNeutral) || (isIntraAccount && neutralIntraAccount)
 
   // Hide delete for transactions older than 2 days
   const canDelete = (() => {
@@ -117,9 +121,9 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
               {isTransfer ? (
-                isIntraAccount ? (
-                  // Intra-account: show "SubA → SubB" with account name as context
-                  transferNeutral ? (
+                renderAsNeutral ? (
+                  // Neutral display: "A → B" (no direction bias)
+                  isIntraAccount ? (
                     <>
                       {fromSubAcc ? `${fromSubAcc.icon} ${fromSubAcc.name}` : 'General'}
                       <span className="text-gray-400 dark:text-gray-500 font-normal"> → </span>
@@ -127,23 +131,25 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
                     </>
                   ) : (
                     <>
-                      <span className="text-gray-400 dark:text-gray-500 font-normal text-xs">
-                        {transferOut ? 'To' : 'From'}
-                      </span>
-                      {' '}
-                      {transferOut
-                        ? (toSubAcc ? `${toSubAcc.icon} ${toSubAcc.name}` : 'General')
-                        : (fromSubAcc ? `${fromSubAcc.icon} ${fromSubAcc.name}` : 'General')
-                      }
+                      {fromAccount ? `${fromAccount.icon} ${fromAccount.name}` : '?'}
+                      <span className="text-gray-400 dark:text-gray-500 font-normal"> → </span>
+                      {toAccount ? `${toAccount.icon} ${toAccount.name}` : '?'}
                     </>
                   )
-                ) : transferNeutral ? (
+                ) : isIntraAccount ? (
+                  // Directional intra-account: "To SubB" or "From SubA"
                   <>
-                    {fromAccount ? `${fromAccount.icon} ${fromAccount.name}` : '?'}
-                    <span className="text-gray-400 dark:text-gray-500 font-normal"> → </span>
-                    {toAccount ? `${toAccount.icon} ${toAccount.name}` : '?'}
+                    <span className="text-gray-400 dark:text-gray-500 font-normal text-xs">
+                      {transferOut ? 'To' : 'From'}
+                    </span>
+                    {' '}
+                    {transferOut
+                      ? (toSubAcc ? `${toSubAcc.icon} ${toSubAcc.name}` : 'General')
+                      : (fromSubAcc ? `${fromSubAcc.icon} ${fromSubAcc.name}` : 'General')
+                    }
                   </>
                 ) : (
+                  // Regular transfer: "To Account" or "From Account"
                   <>
                     <span className="text-gray-400 dark:text-gray-500 font-normal text-xs">
                       {directionLabel}
@@ -164,7 +170,7 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
             </span>
             <div className="flex flex-col items-end flex-shrink-0">
               <span className={`font-semibold text-sm ${
-                isTransfer && transferNeutral
+                renderAsNeutral
                   ? 'text-gray-900 dark:text-gray-100'
                   : isTransfer
                     ? transferOut
@@ -174,7 +180,7 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
                       ? 'text-green-600 dark:text-green-400'
                       : 'text-red-500 dark:text-red-400'
               }`}>
-                {!(isTransfer && transferNeutral) && (
+                {!renderAsNeutral && (
                   isTransfer ? (transferOut ? '-' : '+') : (isIncome ? '+' : '-')
                 )}
                 {isForeign
@@ -190,7 +196,7 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
             </div>
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            {isTransfer && !transferNeutral ? (
+            {isTransfer && !renderAsNeutral ? (
               <span className="text-xs text-gray-400 dark:text-gray-500">
                 {isIntraAccount
                   ? `${fromAccount?.icon} ${fromAccount?.name} · ${fromSubAcc?.name ?? 'General'} → ${toSubAcc?.name ?? 'General'}`

@@ -104,12 +104,18 @@ export function AccountDetailPage() {
     return base + sumIncome(tabTxns) - sumExpense(tabTxns) + sumTransferBalance(tabTxns)
   }, [tabTxns, account, activeSubId])
 
+  // In the "All" sub-accounts view, intra-account transfers net to zero for the
+  // main account — exclude them from income/expense so they don't inflate totals.
+  // In a specific sub-account view, count them normally (they represent real flow).
+  const showingAllSubs = activeSubId === 'all'
+
   const income = useMemo(() => {
     const transferIn = periodTxns
       .filter(t => t.type === 'transfer')
       .reduce((acc, t) => {
         const amt = Number(t.amount) * (Number(t.exchangeRate) || 1)
         if (t.fromAccountId === t.toAccountId) {
+          if (showingAllSubs) return acc  // neutral in all-subs view
           const sub = t.subAccountId || ''
           return (sub === (t.toSubAccountId || '') && sub !== (t.fromSubAccountId || ''))
             ? acc + amt : acc
@@ -117,7 +123,7 @@ export function AccountDetailPage() {
         return t.accountId === t.toAccountId ? acc + amt : acc
       }, 0)
     return sumIncome(periodTxns) + transferIn
-  }, [periodTxns])
+  }, [periodTxns, showingAllSubs])
 
   const expense = useMemo(() => {
     const transferOut = periodTxns
@@ -125,6 +131,7 @@ export function AccountDetailPage() {
       .reduce((acc, t) => {
         const amt = Number(t.amount) * (Number(t.exchangeRate) || 1)
         if (t.fromAccountId === t.toAccountId) {
+          if (showingAllSubs) return acc  // neutral in all-subs view
           const sub = t.subAccountId || ''
           return (sub === (t.fromSubAccountId || '') && sub !== (t.toSubAccountId || ''))
             ? acc + amt : acc
@@ -132,7 +139,7 @@ export function AccountDetailPage() {
         return t.accountId === t.fromAccountId ? acc + amt : acc
       }, 0)
     return sumExpense(periodTxns) + transferOut
-  }, [periodTxns])
+  }, [periodTxns, showingAllSubs])
 
   // Per-currency raw balances (un-converted) from all-time tabTxns
   const currencyBalances = useMemo(() => {
@@ -354,6 +361,7 @@ export function AccountDetailPage() {
             <TransactionList
               transactions={[...periodTxns].sort((a, b) => b.date.localeCompare(a.date))}
               showDateHeaders
+              neutralIntraAccount={showingAllSubs}
             />
           )}
         </div>
