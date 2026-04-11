@@ -13,17 +13,16 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
   // Build a merged "transfer edit object" combining both legs, for the edit form.
   // We look up the other leg so we can pre-fill both sub-accounts.
   function buildTransferEditObj() {
-    const other = otherLeg
-    const outLeg = transferOut ? transaction : other
-    const inLeg  = transferOut ? other : transaction
+    const outLegRef = transferOut ? transaction : otherLeg
+    const inLegRef  = transferOut ? otherLeg : transaction
     return {
       id:               transaction.id,
       type:             'transfer',
       transferId:       transaction.transferId,
-      accountId:        fromAccountId  || '',   // from account
+      accountId:        fromAccountId  || '',
       toAccountId:      toAccountId    || '',
-      fromSubAccountId: outLeg?.subAccountId || '',
-      toSubAccountId:   inLeg?.subAccountId  || '',
+      fromSubAccountId: outLegRef?.subAccountId || '',
+      toSubAccountId:   inLegRef?.subAccountId  || '',
       amount:           transaction.amount,
       date:             transaction.date,
       note:             transaction.note,
@@ -51,21 +50,22 @@ export function TransactionItem({ transaction, showDate = false, transferNeutral
   const fromAccountId = transaction.fromAccountId || (otherLeg ? otherLeg.accountId : null)
   const toAccountId   = transaction.toAccountId   || (otherLeg ? transaction.accountId : null)
 
-  // Transfer direction: is money leaving this account?
-  const isIntraAccount = isTransfer && fromAccountId && fromAccountId === toAccountId
-  const transferOut = isTransfer && !!(fromAccountId) && (
-    isIntraAccount
-      ? (transaction.subAccountId || '') === (transaction.fromSubAccountId || '')
-      : transaction.accountId === fromAccountId
+  // transferLeg ('out'/'in') is the canonical direction — fall back to accountId comparison
+  const transferOut = isTransfer && (
+    transaction.transferLeg === 'out' ||
+    (transaction.transferLeg == null && !!fromAccountId && transaction.accountId === fromAccountId)
   )
+  const isIntraAccount = isTransfer && fromAccountId && fromAccountId === toAccountId
   const counterpartId = isTransfer ? (transferOut ? toAccountId : fromAccountId) : null
   const counterpart = accounts.find(a => a.id === counterpartId)
   const directionLabel = isTransfer ? (fromAccountId ? (transferOut ? 'To' : 'From') : '⇄') : null
   const fromAccount = accounts.find(a => a.id === fromAccountId)
   const toAccount   = accounts.find(a => a.id === toAccountId)
-  // For intra-account transfers, look up sub-account names for clearer display
-  const fromSubAcc = isIntraAccount ? accounts.find(a => a.id === transaction.fromSubAccountId) : null
-  const toSubAcc   = isIntraAccount ? accounts.find(a => a.id === transaction.toSubAccountId)   : null
+  // For intra-account: outLeg has this record's subAccountId, otherLeg has the counterpart's
+  const outLeg = isIntraAccount ? (transferOut ? transaction : otherLeg) : null
+  const inLeg  = isIntraAccount ? (transferOut ? otherLeg : transaction) : null
+  const fromSubAcc = outLeg ? accounts.find(a => a.id === outLeg.subAccountId) : null
+  const toSubAcc   = inLeg  ? accounts.find(a => a.id === inLeg.subAccountId)  : null
   const isIncome = transaction.type === 'income'
   // Render transfer as neutral (no color, no sign) when:
   // - explicitly requested via transferNeutral, OR

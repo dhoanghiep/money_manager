@@ -42,15 +42,12 @@ export function sumTransferBalance(transactions) {
     .filter(t => t.type === 'transfer')
     .reduce((acc, t) => {
       const amt = baseAmount(t)
-      if (t.fromAccountId === t.toAccountId) {
-        // Intra-account transfer: use subAccountId to determine direction
-        const sub = t.subAccountId || ''
-        if (sub === (t.fromSubAccountId || '')) return acc - amt  // outflow leg
-        if (sub === (t.toSubAccountId   || '')) return acc + amt  // inflow leg
-        return acc
-      }
-      if (t.accountId === t.fromAccountId) return acc - amt  // money leaving
-      if (t.accountId === t.toAccountId)   return acc + amt  // money arriving
+      // transferLeg is the canonical direction marker (set on all new records)
+      if (t.transferLeg === 'out') return acc - amt
+      if (t.transferLeg === 'in')  return acc + amt
+      // Fallback for old records without transferLeg (cross-account only)
+      if (t.accountId === t.fromAccountId) return acc - amt
+      if (t.accountId === t.toAccountId)   return acc + amt
       return acc
     }, 0)
 }

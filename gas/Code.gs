@@ -222,8 +222,8 @@ function updateTransaction(id, data) {
 }
 
 // Creates two linked transaction records for a transfer between accounts.
-// Both records share a transferId and carry fromAccountId + toAccountId.
-// Uses header-name mapping to be immune to column order changes.
+// Each leg carries its own accountId/subAccountId + a transferLeg ('out'/'in')
+// so direction is always unambiguous — no need for fromSubAccountId/toSubAccountId columns.
 function addTransfer(data) {
   const sheet = getSheet(SHEET_NAMES.TRANSACTIONS);
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -251,24 +251,24 @@ function addTransfer(data) {
     transferId: transferId,
     fromAccountId: data.fromAccountId,
     toAccountId: data.toAccountId,
-    fromSubAccountId: data.fromSubAccountId || '',
-    toSubAccountId: data.toSubAccountId || '',
     createdAt: now,
     updatedAt: now,
   };
 
-  // Outflow leg: accountId + subAccountId = from side
+  // Outflow leg — money leaving fromAccount/fromSubAccount
   sheet.appendRow(buildRow(Object.assign({}, shared, {
     id: idOut,
     accountId: data.fromAccountId,
     subAccountId: data.fromSubAccountId || '',
+    transferLeg: 'out',
   })));
 
-  // Inflow leg: accountId + subAccountId = to side
+  // Inflow leg — money arriving at toAccount/toSubAccount
   sheet.appendRow(buildRow(Object.assign({}, shared, {
     id: idIn,
     accountId: data.toAccountId,
     subAccountId: data.toSubAccountId || '',
+    transferLeg: 'in',
   })));
 
   return { ok: true, transferId: transferId, idOut: idOut, idIn: idIn };
@@ -288,25 +288,24 @@ function deleteTransfer(transferId) {
   return { ok: true };
 }
 
-// Updates both legs of a transfer (shared fields + per-leg accountId/subAccountId).
+// Updates both legs of a transfer. Uses transferLeg ('out'/'in') to identify each leg.
 function updateTransfer(transferId, data) {
   const sheet = getSheet(SHEET_NAMES.TRANSACTIONS);
   const rows = sheet.getDataRange().getValues();
   const headers = rows[0];
-  const tCol        = headers.indexOf('transferId');
-  const accCol      = headers.indexOf('accountId');
-  const fromCol     = headers.indexOf('fromAccountId');
-  const toAccCol    = headers.indexOf('toAccountId');
-  const fromSubCol  = headers.indexOf('fromSubAccountId');
-  const toSubCol    = headers.indexOf('toSubAccountId');
-  const subAccCol   = headers.indexOf('subAccountId');
+  const tCol       = headers.indexOf('transferId');
+  const accCol     = headers.indexOf('accountId');
+  const fromCol    = headers.indexOf('fromAccountId');
+  const toAccCol   = headers.indexOf('toAccountId');
+  const subAccCol  = headers.indexOf('subAccountId');
+  const legCol     = headers.indexOf('transferLeg');
   if (tCol === -1) return { error: 'transferId column not found' };
   const now = new Date().toISOString();
 
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][tCol]) !== String(transferId)) continue;
     const rowNum = i + 1;
-    // Shared fields
+    // Shared fields (same on both legs)
     if (data.date !== undefined)         sheet.getRange(rowNum, headers.indexOf('date') + 1).setValue(data.date);
     if (data.amount !== undefined)       sheet.getRange(rowNum, headers.indexOf('amount') + 1).setValue(data.amount);
     if (data.note !== undefined)         sheet.getRange(rowNum, headers.indexOf('note') + 1).setValue(data.note || '');
@@ -314,27 +313,13 @@ function updateTransfer(transferId, data) {
       sheet.getRange(rowNum, headers.indexOf('currency') + 1).setValue(data.currency || '');
     if (data.exchangeRate !== undefined && headers.indexOf('exchangeRate') !== -1)
       sheet.getRange(rowNum, headers.indexOf('exchangeRate') + 1).setValue(data.exchangeRate || 1);
-    // Update shared fromAccountId / toAccountId / fromSubAccountId / toSubAccountId on both legs
     if (data.fromAccountId !== undefined && fromCol !== -1)
       sheet.getRange(rowNum, fromCol + 1).setValue(data.fromAccountId);
     if (data.toAccountId !== undefined && toAccCol !== -1)
       sheet.getRange(rowNum, toAccCol + 1).setValue(data.toAccountId);
-    if (data.fromSubAccountId !== undefined && fromSubCol !== -1)
-      sheet.getRange(rowNum, fromSubCol + 1).setValue(data.fromSubAccountId || '');
-    if (data.toSubAccountId !== undefined && toSubCol !== -1)
-      sheet.getRange(rowNum, toSubCol + 1).setValue(data.toSubAccountId || '');
-    // Per-leg: determine outflow vs inflow
-    // For intra-account (fromAccountId === toAccountId) use fromSubAccountId stored on row
-    var rowFromAcc = String(rows[i][fromCol] || '');
-    var rowToAcc   = String(rows[i][toAccCol] || '');
-    var isIntraAccount = rowFromAcc !== '' && rowFromAcc === rowToAcc;
-    var isOutflow;
-    if (isIntraAccount && fromSubCol !== -1) {
-      // Outflow leg has subAccountId === fromSubAccountId
-      isOutflow = String(rows[i][subAccCol] || '') === String(rows[i][fromSubCol] || '');
-    } else {
-      isOutflow = fromCol !== -1 && String(rows[i][accCol]) === String(rows[i][fromCol]);
-    }
+    // Per-leg: use transferLeg to determine direction; fall back to accountId===fromAccountId
+    var leg = legCol !== -1 ? String(rows[i][legCol] || '') : '';
+    var isOutflow = leg === 'out' || (leg === '' && fromCol !== -1 && String(rows[i][accCol]) === String(rows[i][fromCol]));
     if (isOutflow) {
       if (data.fromAccountId !== undefined && accCol !== -1)
         sheet.getRange(rowNum, accCol + 1).setValue(data.fromAccountId);
@@ -729,33 +714,66 @@ function addScheduleSubCategoryColumn() {
   }
 }
 
-// ── Transfer fromSubAccountId / toSubAccountId Column Migration ──
-// Run once to add fromSubAccountId and toSubAccountId to Transactions.
-// Required for intra-account sub-account transfers to display and calculate correctly.
-function addTransferSubAccountColumns() {
+// ── transferLeg Column Migration ──────────────────────────────
+// Run once to add the transferLeg column ('out'/'in') to Transactions.
+// This replaces the now-removed fromSubAccountId / toSubAccountId columns.
+// After running, you may delete those columns from the sheet manually.
+function addTransferLegColumn() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Transactions');
   if (!sheet) { Logger.log('Transactions sheet not found'); return; }
 
-  function addColAfter(afterName, newName) {
-    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    if (headers.indexOf(newName) !== -1) {
-      Logger.log(newName + ' column already exists');
-      return;
-    }
-    var afterIdx = headers.indexOf(afterName);
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  // Add the column if missing
+  if (headers.indexOf('transferLeg') === -1) {
+    var afterIdx = headers.indexOf('toAccountId');
     if (afterIdx !== -1) {
       sheet.insertColumnAfter(afterIdx + 1);
-      sheet.getRange(1, afterIdx + 2).setValue(newName);
+      sheet.getRange(1, afterIdx + 2).setValue('transferLeg');
     } else {
-      sheet.getRange(1, sheet.getLastColumn() + 1).setValue(newName);
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue('transferLeg');
     }
-    Logger.log('Added ' + newName + ' column to Transactions');
+    Logger.log('Added transferLeg column');
+    // Refresh headers after insertion
+    headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   }
 
-  addColAfter('toAccountId', 'fromSubAccountId');
-  addColAfter('fromSubAccountId', 'toSubAccountId');
-  Logger.log('Transfer sub-account columns migration complete!');
+  // Populate transferLeg for existing transfer rows
+  var legCol     = headers.indexOf('transferLeg') + 1;  // 1-based
+  var tIdCol     = headers.indexOf('transferId');
+  var accCol     = headers.indexOf('accountId');
+  var fromAccCol = headers.indexOf('fromAccountId');
+  var allRows    = sheet.getDataRange().getValues();
+
+  // Group transfer rows by transferId to find pairs
+  var groups = {};
+  for (var i = 1; i < allRows.length; i++) {
+    var tid = String(allRows[i][tIdCol] || '');
+    if (!tid) continue;
+    if (!groups[tid]) groups[tid] = [];
+    groups[tid].push({ rowNum: i + 1, row: allRows[i] });
+  }
+
+  var updated = 0;
+  for (var tid in groups) {
+    var legs = groups[tid];
+    legs.forEach(function(entry) {
+      if (String(entry.row[legCol - 1] || '') !== '') return; // already set
+      var legValue;
+      var rowFromAcc = String(entry.row[fromAccCol] || '');
+      var rowAccId   = String(entry.row[accCol] || '');
+      if (rowFromAcc && rowFromAcc === String(allRows[legs[0].rowNum - 1][headers.indexOf('toAccountId')] || '')) {
+        // Intra-account: use row position — first row in sheet is 'out'
+        legValue = (entry.rowNum === legs[0].rowNum) ? 'out' : 'in';
+      } else {
+        legValue = (rowAccId === rowFromAcc) ? 'out' : 'in';
+      }
+      sheet.getRange(entry.rowNum, legCol).setValue(legValue);
+      updated++;
+    });
+  }
+  Logger.log('transferLeg migration complete — updated ' + updated + ' rows');
 }
 
 // ── Schedules subAccountId Column Migration ───────────────────
@@ -1070,7 +1088,7 @@ function setupSheets() {
     return sheet;
   }
 
-  ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt', 'subCategoryId', 'currency', 'exchangeRate', 'subAccountId', 'transferId', 'fromAccountId', 'toAccountId', 'fromSubAccountId', 'toSubAccountId', 'scheduleId']);
+  ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt', 'subCategoryId', 'currency', 'exchangeRate', 'subAccountId', 'transferId', 'fromAccountId', 'toAccountId', 'transferLeg', 'scheduleId']);
   ensureSheet(SHEET_NAMES.CATEGORIES,   ['id', 'name', 'color', 'icon', 'type', 'isDefault', 'parentId']);
   ensureSheet(SHEET_NAMES.ACCOUNTS,     ['id', 'name', 'color', 'icon', 'type', 'initialBalance', 'isDefault']);
   ensureSheet(SHEET_NAMES.SCHEDULES,    ['id', 'name', 'amount', 'type', 'categoryId', 'subCategoryId', 'accountId', 'subAccountId', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'isActive', 'createdAt']);

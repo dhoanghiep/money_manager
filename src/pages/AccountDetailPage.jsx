@@ -113,14 +113,11 @@ export function AccountDetailPage() {
     const transferIn = periodTxns
       .filter(t => t.type === 'transfer')
       .reduce((acc, t) => {
+        // Intra-account transfers are neutral in the all-subs view
+        if (showingAllSubs && t.fromAccountId === t.toAccountId) return acc
         const amt = Number(t.amount) * (Number(t.exchangeRate) || 1)
-        if (t.fromAccountId === t.toAccountId) {
-          if (showingAllSubs) return acc  // neutral in all-subs view
-          const sub = t.subAccountId || ''
-          return (sub === (t.toSubAccountId || '') && sub !== (t.fromSubAccountId || ''))
-            ? acc + amt : acc
-        }
-        return t.accountId === t.toAccountId ? acc + amt : acc
+        const isIn = t.transferLeg === 'in' || (t.transferLeg == null && t.accountId === t.toAccountId)
+        return isIn ? acc + amt : acc
       }, 0)
     return sumIncome(periodTxns) + transferIn
   }, [periodTxns, showingAllSubs])
@@ -129,14 +126,10 @@ export function AccountDetailPage() {
     const transferOut = periodTxns
       .filter(t => t.type === 'transfer')
       .reduce((acc, t) => {
+        if (showingAllSubs && t.fromAccountId === t.toAccountId) return acc
         const amt = Number(t.amount) * (Number(t.exchangeRate) || 1)
-        if (t.fromAccountId === t.toAccountId) {
-          if (showingAllSubs) return acc  // neutral in all-subs view
-          const sub = t.subAccountId || ''
-          return (sub === (t.fromSubAccountId || '') && sub !== (t.toSubAccountId || ''))
-            ? acc + amt : acc
-        }
-        return t.accountId === t.fromAccountId ? acc + amt : acc
+        const isOut = t.transferLeg === 'out' || (t.transferLeg == null && t.accountId === t.fromAccountId)
+        return isOut ? acc + amt : acc
       }, 0)
     return sumExpense(periodTxns) + transferOut
   }, [periodTxns, showingAllSubs])

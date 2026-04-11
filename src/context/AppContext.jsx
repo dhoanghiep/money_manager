@@ -75,7 +75,8 @@ function reducer(state, action) {
         ...state,
         transactions: state.transactions.map(t => {
           if (t.transferId !== transferId) return t
-          const isOutflow = t.fromAccountId && t.accountId === t.fromAccountId
+          const isOutflow = t.transferLeg === 'out' ||
+            (t.transferLeg == null && t.fromAccountId && t.accountId === t.fromAccountId)
           return {
             ...t,
             date:          data.date          ?? t.date,
@@ -249,8 +250,8 @@ export function AppProvider({ children }) {
       currency: data.currency, exchangeRate: data.exchangeRate || 1,
       transferId: res.transferId, fromAccountId: data.fromAccountId, toAccountId: data.toAccountId,
       createdAt: now, updatedAt: now }
-    dispatch({ type: 'UPSERT_TRANSACTION', payload: { ...base, id: res.idOut, accountId: data.fromAccountId, subAccountId: data.fromSubAccountId || '' } })
-    dispatch({ type: 'UPSERT_TRANSACTION', payload: { ...base, id: res.idIn,  accountId: data.toAccountId,  subAccountId: data.toSubAccountId   || '' } })
+    dispatch({ type: 'UPSERT_TRANSACTION', payload: { ...base, id: res.idOut, accountId: data.fromAccountId, subAccountId: data.fromSubAccountId || '', transferLeg: 'out' } })
+    dispatch({ type: 'UPSERT_TRANSACTION', payload: { ...base, id: res.idIn,  accountId: data.toAccountId,  subAccountId: data.toSubAccountId   || '', transferLeg: 'in'  } })
     bumpTx()
     return res
   }
