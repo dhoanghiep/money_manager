@@ -12,18 +12,23 @@ export function Modal({ open, onClose, title, children, size = 'md' }) {
 
   if (size === 'fullscreen') {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900">
-        {title && (
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-            >✕</button>
+      // Mobile: true full-screen. Desktop (sm+): centered with default width, full height.
+      <div className="fixed inset-0 z-50 flex flex-col sm:items-center sm:justify-center sm:p-4 bg-white dark:bg-gray-900 sm:bg-black/50 sm:backdrop-blur-sm">
+        {/* Desktop backdrop click to close */}
+        <div className="hidden sm:block absolute inset-0" onClick={onClose} />
+        <div className="relative flex flex-col w-full sm:max-w-md sm:h-[calc(100dvh-2rem)] sm:rounded-2xl sm:shadow-2xl bg-white dark:bg-gray-900 sm:overflow-hidden h-full">
+          {title && (
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >✕</button>
+            </div>
+          )}
+          <div className="overflow-y-auto flex-1">
+            {children}
           </div>
-        )}
-        <div className="overflow-y-auto flex-1">
-          {children}
         </div>
       </div>
     )
