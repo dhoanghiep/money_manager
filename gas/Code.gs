@@ -223,31 +223,54 @@ function updateTransaction(id, data) {
 
 // Creates two linked transaction records for a transfer between accounts.
 // Both records share a transferId and carry fromAccountId + toAccountId.
+// Uses header-name mapping to be immune to column order changes.
 function addTransfer(data) {
   const sheet = getSheet(SHEET_NAMES.TRANSACTIONS);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const now = new Date().toISOString();
   const transferId = generateId('trf');
   const idOut = generateId('txn');
   const idIn  = generateId('txn');
 
-  // Outflow: money leaves fromAccount (subAccountId = fromSubAccountId)
-  sheet.appendRow([
-    idOut, data.date, data.amount, 'transfer',
-    '', data.fromAccountId, data.note || '',
-    now, now,
-    data.currency || '', data.exchangeRate || 1,
-    '', data.fromSubAccountId || '',
-    transferId, data.fromAccountId, data.toAccountId,
-  ]);
-  // Inflow: money arrives at toAccount (subAccountId = toSubAccountId)
-  sheet.appendRow([
-    idIn, data.date, data.amount, 'transfer',
-    '', data.toAccountId, data.note || '',
-    now, now,
-    data.currency || '', data.exchangeRate || 1,
-    '', data.toSubAccountId || '',
-    transferId, data.fromAccountId, data.toAccountId,
-  ]);
+  function buildRow(fields) {
+    var row = new Array(headers.length).fill('');
+    for (var key in fields) {
+      var col = headers.indexOf(key);
+      if (col !== -1) row[col] = fields[key];
+    }
+    return row;
+  }
+
+  var shared = {
+    date: data.date,
+    amount: data.amount,
+    type: 'transfer',
+    note: data.note || '',
+    currency: data.currency || '',
+    exchangeRate: data.exchangeRate || 1,
+    transferId: transferId,
+    fromAccountId: data.fromAccountId,
+    toAccountId: data.toAccountId,
+    fromSubAccountId: data.fromSubAccountId || '',
+    toSubAccountId: data.toSubAccountId || '',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // Outflow leg: accountId + subAccountId = from side
+  sheet.appendRow(buildRow(Object.assign({}, shared, {
+    id: idOut,
+    accountId: data.fromAccountId,
+    subAccountId: data.fromSubAccountId || '',
+  })));
+
+  // Inflow leg: accountId + subAccountId = to side
+  sheet.appendRow(buildRow(Object.assign({}, shared, {
+    id: idIn,
+    accountId: data.toAccountId,
+    subAccountId: data.toSubAccountId || '',
+  })));
+
   return { ok: true, transferId: transferId, idOut: idOut, idIn: idIn };
 }
 
@@ -270,9 +293,13 @@ function updateTransfer(transferId, data) {
   const sheet = getSheet(SHEET_NAMES.TRANSACTIONS);
   const rows = sheet.getDataRange().getValues();
   const headers = rows[0];
-  const tCol     = headers.indexOf('transferId');
-  const accCol   = headers.indexOf('accountId');
-  const fromCol  = headers.indexOf('fromAccountId');
+  const tCol        = headers.indexOf('transferId');
+  const accCol      = headers.indexOf('accountId');
+  const fromCol     = headers.indexOf('fromAccountId');
+  const toAccCol    = headers.indexOf('toAccountId');
+  const fromSubCol  = headers.indexOf('fromSubAccountId');
+  const toSubCol    = headers.indexOf('toSubAccountId');
+  const subAccCol   = headers.indexOf('subAccountId');
   if (tCol === -1) return { error: 'transferId column not found' };
   const now = new Date().toISOString();
 
@@ -287,21 +314,37 @@ function updateTransfer(transferId, data) {
       sheet.getRange(rowNum, headers.indexOf('currency') + 1).setValue(data.currency || '');
     if (data.exchangeRate !== undefined && headers.indexOf('exchangeRate') !== -1)
       sheet.getRange(rowNum, headers.indexOf('exchangeRate') + 1).setValue(data.exchangeRate || 1);
-    // Update both legs' fromAccountId / toAccountId
+    // Update shared fromAccountId / toAccountId / fromSubAccountId / toSubAccountId on both legs
     if (data.fromAccountId !== undefined && fromCol !== -1)
       sheet.getRange(rowNum, fromCol + 1).setValue(data.fromAccountId);
-    if (data.toAccountId !== undefined && headers.indexOf('toAccountId') !== -1)
-      sheet.getRange(rowNum, headers.indexOf('toAccountId') + 1).setValue(data.toAccountId);
-    // Per-leg: outflow has accountId === fromAccountId
-    const isOutflow = fromCol !== -1 && String(rows[i][accCol]) === String(rows[i][fromCol]);
-    if (isOutflow) {
-      if (data.fromAccountId !== undefined) sheet.getRange(rowNum, accCol + 1).setValue(data.fromAccountId);
-      if (data.fromSubAccountId !== undefined && headers.indexOf('subAccountId') !== -1)
-        sheet.getRange(rowNum, headers.indexOf('subAccountId') + 1).setValue(data.fromSubAccountId || '');
+    if (data.toAccountId !== undefined && toAccCol !== -1)
+      sheet.getRange(rowNum, toAccCol + 1).setValue(data.toAccountId);
+    if (data.fromSubAccountId !== undefined && fromSubCol !== -1)
+      sheet.getRange(rowNum, fromSubCol + 1).setValue(data.fromSubAccountId || '');
+    if (data.toSubAccountId !== undefined && toSubCol !== -1)
+      sheet.getRange(rowNum, toSubCol + 1).setValue(data.toSubAccountId || '');
+    // Per-leg: determine outflow vs inflow
+    // For intra-account (fromAccountId === toAccountId) use fromSubAccountId stored on row
+    var rowFromAcc = String(rows[i][fromCol] || '');
+    var rowToAcc   = String(rows[i][toAccCol] || '');
+    var isIntraAccount = rowFromAcc !== '' && rowFromAcc === rowToAcc;
+    var isOutflow;
+    if (isIntraAccount && fromSubCol !== -1) {
+      // Outflow leg has subAccountId === fromSubAccountId
+      isOutflow = String(rows[i][subAccCol] || '') === String(rows[i][fromSubCol] || '');
     } else {
-      if (data.toAccountId !== undefined) sheet.getRange(rowNum, accCol + 1).setValue(data.toAccountId);
-      if (data.toSubAccountId !== undefined && headers.indexOf('subAccountId') !== -1)
-        sheet.getRange(rowNum, headers.indexOf('subAccountId') + 1).setValue(data.toSubAccountId || '');
+      isOutflow = fromCol !== -1 && String(rows[i][accCol]) === String(rows[i][fromCol]);
+    }
+    if (isOutflow) {
+      if (data.fromAccountId !== undefined && accCol !== -1)
+        sheet.getRange(rowNum, accCol + 1).setValue(data.fromAccountId);
+      if (data.fromSubAccountId !== undefined && subAccCol !== -1)
+        sheet.getRange(rowNum, subAccCol + 1).setValue(data.fromSubAccountId || '');
+    } else {
+      if (data.toAccountId !== undefined && accCol !== -1)
+        sheet.getRange(rowNum, accCol + 1).setValue(data.toAccountId);
+      if (data.toSubAccountId !== undefined && subAccCol !== -1)
+        sheet.getRange(rowNum, subAccCol + 1).setValue(data.toSubAccountId || '');
     }
     sheet.getRange(rowNum, headers.indexOf('updatedAt') + 1).setValue(now);
   }
@@ -686,6 +729,35 @@ function addScheduleSubCategoryColumn() {
   }
 }
 
+// ── Transfer fromSubAccountId / toSubAccountId Column Migration ──
+// Run once to add fromSubAccountId and toSubAccountId to Transactions.
+// Required for intra-account sub-account transfers to display and calculate correctly.
+function addTransferSubAccountColumns() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Transactions');
+  if (!sheet) { Logger.log('Transactions sheet not found'); return; }
+
+  function addColAfter(afterName, newName) {
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (headers.indexOf(newName) !== -1) {
+      Logger.log(newName + ' column already exists');
+      return;
+    }
+    var afterIdx = headers.indexOf(afterName);
+    if (afterIdx !== -1) {
+      sheet.insertColumnAfter(afterIdx + 1);
+      sheet.getRange(1, afterIdx + 2).setValue(newName);
+    } else {
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue(newName);
+    }
+    Logger.log('Added ' + newName + ' column to Transactions');
+  }
+
+  addColAfter('toAccountId', 'fromSubAccountId');
+  addColAfter('fromSubAccountId', 'toSubAccountId');
+  Logger.log('Transfer sub-account columns migration complete!');
+}
+
 // ── Schedules subAccountId Column Migration ───────────────────
 // Run once to add subAccountId to the Schedules sheet.
 function addScheduleSubAccountColumn() {
@@ -998,7 +1070,7 @@ function setupSheets() {
     return sheet;
   }
 
-  ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt', 'subCategoryId', 'currency', 'exchangeRate', 'subAccountId', 'transferId', 'fromAccountId', 'toAccountId', 'scheduleId']);
+  ensureSheet(SHEET_NAMES.TRANSACTIONS, ['id', 'date', 'amount', 'type', 'categoryId', 'accountId', 'note', 'createdAt', 'updatedAt', 'subCategoryId', 'currency', 'exchangeRate', 'subAccountId', 'transferId', 'fromAccountId', 'toAccountId', 'fromSubAccountId', 'toSubAccountId', 'scheduleId']);
   ensureSheet(SHEET_NAMES.CATEGORIES,   ['id', 'name', 'color', 'icon', 'type', 'isDefault', 'parentId']);
   ensureSheet(SHEET_NAMES.ACCOUNTS,     ['id', 'name', 'color', 'icon', 'type', 'initialBalance', 'isDefault']);
   ensureSheet(SHEET_NAMES.SCHEDULES,    ['id', 'name', 'amount', 'type', 'categoryId', 'subCategoryId', 'accountId', 'subAccountId', 'note', 'frequency', 'startDate', 'nextDate', 'endDate', 'isActive', 'createdAt']);
